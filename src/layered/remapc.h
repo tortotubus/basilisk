@@ -68,7 +68,7 @@ static void remap_robin (double s_r,
                          double f_b, double lambda_b,
                          double C[3]) // fixme: does not work on GPUs if function
 {
-  double a = - lambda_b, s = - a + (a - 1.)/3. + 1/2.;
+  double a = - lambda_b, s = - a + (a - 1.)/3. + 1/2. [0];
   double M[3][3] = {
     {    - a,    1./6.,     a/3.},
     {     1.,  - 2./3.,  - 1./3.},
@@ -307,7 +307,13 @@ $$
 P(0) = f_b + \lambda_b \partial_n P(0)
 $$
 
-If limiter is `true` then monotonic limiters are applied. */
+To impose a Neumann zero boundary condition one can set $\lambda_b$ to
+`HUGE` and $f_b$ to zero.
+
+If limiter is `true` then monotonic limiters are applied. In this case
+the Neumann zero condition leads to a constant profile in the top or
+bottom layer, which guarantees boundedness of the remapping. Note that
+other boundary conditions will not guarantee boundedness. */
 
 void remap_c (int npos, int nnew,
               const double xpos[npos], const double xnew[nnew],
@@ -346,29 +352,50 @@ void remap_c (int npos, int nnew,
       k++;
 
       /**
-      The top layer is a special case. We use Neumann or Robin
-      boundary conditions to compute the polynomial. */
+      The top layer is a special case. */
       
       if (k == npos - 2) {
-        if (df_t)
-          remap_neumann (s_left, fdat[k], - df_t*(xpos[k+1] - xpos[k]), C);
-        else
-          remap_robin (s_left, fdat[k], f_t, - lambda_t/(xpos[k+1] - xpos[k]), C);
 
         /**
-        Since the functions above are written for the bottom layer, we
-        need to apply symmetry conditions i.e. transform $x$ into $1 -
-        x$. This gives the following polynomial coefficients. */
+        If limiting is used together with Neumann zero fluxes, the
+        value must be constant in the last layer. */
         
-        C[0] += C[2] + C[1];
-        C[1] = - C[1] - 2.*C[2];
+        if (limiter && lambda_t == HUGE) {
+          C[0] = fdat[k];
+          C[1] = 0.;
+          C[2] = 0.;
+        }
+
+        /**
+        Otherwise we use Neumann or Robin
+        boundary conditions to compute the polynomial. */
+        
+        else {
+          if (df_t)
+            remap_neumann (s_left, fdat[k], - df_t*(xpos[k+1] - xpos[k]), C);
+          else
+            remap_robin (s_left, fdat[k], f_t, - lambda_t/(xpos[k+1] - xpos[k]), C);
+
+          /**
+          Since the functions above are written for the bottom layer, we
+          need to apply symmetry conditions i.e. transform $x$ into $1 -
+          x$. This gives the following polynomial coefficients. */
+        
+          C[0] += C[2] + C[1];
+          C[1] = - C[1] - 2.*C[2];
+        }
       }
       else {
 
         /**
-        For all other layers, we need to compute the right value. */
+        For all other layers, we need to compute the right value. If
+        limiting is used together with Neumann zero fluxes we impose a
+        constant profile in the bottom or top layer. */
         
-        double s_right = right_value (k, npos, xpos, fdat, f_b, lambda_b, df_b, f_t, lambda_t, df_t);
+        double s_right =
+          limiter && lambda_b == HUGE && k == 0 ? fdat[0] :
+          limiter && lambda_t == HUGE && k == npos - 3 ? fdat[npos - 2] :
+          right_value (k, npos, xpos, fdat, f_b, lambda_b, df_b, f_t, lambda_t, df_t);
 
         /**
         We use boundary conditions for the bottom layer. */
