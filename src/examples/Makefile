@@ -42,10 +42,8 @@ slave.o: $(QCC) slave.c ../slave.h Makefile
 	$(QCC) $(CFLAGS) -fno-common -D_OBJECT -c slave.c
 	objcopy -G slave_step -G slave_stop -G slave_interpolate slave.o
 
-# fixme: this runs much more slowly with -fopenmp
+# fixme: these run much more slowly with -fopenmp
 loglayer.s: CFLAGS = -O2
 loglayer.tst: CFLAGS = -O2
-
-# fixme: strange problem with dimensions
-wall-model.s: CFLAGS = -disable-dimensions -O2
-wall-model.tst: CFLAGS = -disable-dimensions -O2
+wall-model.s: CFLAGS = -O2
+wall-model.tst: CFLAGS = -O2

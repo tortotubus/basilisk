@@ -142,7 +142,7 @@ using the slip length $\lambda$ which will be computed with the
 [slip()](#slip) function. */
 
 scalar U[];
-double lambda, u_star;
+double lambda = 0, u_star;
 U[left] = navier (0., lambda);
 
 /**
@@ -177,8 +177,7 @@ event integration (i++)
   $\lambda$ using only the value of the velocity gradient on the left
   boundary. */
   
-
-  foreach_point (yc)
+  foreach_boundary (left)
     lambda = slip (yc, (U[] - U[-1])/Delta, &u_star);
 
   /**
