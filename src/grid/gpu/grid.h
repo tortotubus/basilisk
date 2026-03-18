@@ -568,6 +568,9 @@ static bool is_boundary_attribute (const External * g)
 	   !strcmp (g->name, ".boundary_top")));
 }
 
+// fixme: for the moment only 'const int' are considered, this could be generalised
+#define IS_EXTERNAL_CONSTANT(g) ((g)->constant && (g)->type == sym_INT && !(g)->data)
+
 static
 void hash_external (Adler32Hash * hash, const External * g, const ForeachData * loop, int indent)
 {
@@ -626,6 +629,8 @@ void hash_external (Adler32Hash * hash, const External * g, const ForeachData * 
       size = sizeof (tensor);
     a32_hash_add (hash, pointer, size);
   }
+  else if (IS_EXTERNAL_CONSTANT(g))
+    a32_hash_add (hash, g->pointer, sizeof(int));
 }
 
 static
@@ -984,6 +989,13 @@ char * build_shader (External * externals, const ForeachData * loop,
 	not flexible (the parameter must be called 'p') and should be improved. */
 	
 	fs = str_append (fs, "coord p = vec3((vsPoint*vsScale + vsOrigin)*L0 + vec2(X0, Y0),0);\n");
+      }
+      else if (IS_EXTERNAL_CONSTANT(g)) {
+	// fixme: for the moment only 'const int' are considered, this could be generalised
+	char value[20];
+	assert (g->pointer);
+	snprintf (value, 19, "%d", *((int *)g->pointer));
+	fs = str_append (fs, "const ", type_string (g), " ", EXTERNAL_NAME (g), "=", value, ";\n");
       }
       else if (strcmp (g->name, "Dimensions")) {
 	char * type = type_string (g);
@@ -1594,6 +1606,7 @@ static Shader * compile_shader (ForeachData * loop,
   int nuniforms = 0;
   for (const External * g = merged; g; g = g->next) {
     if (g->name[0] == '.') continue;
+    if (IS_EXTERNAL_CONSTANT(g)) continue;
     if (g->type == sym_function_declaration || g->type == sym_function_definition) continue;
     if (g->type == sym_INT && (!strcmp (g->name, "N") ||
 			       !strcmp (g->name, "nl") ||

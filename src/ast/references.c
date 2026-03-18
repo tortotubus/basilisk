@@ -246,6 +246,15 @@ char * add_reference (Ast * ref, char * references, Ast * scope, Stack * stack, 
 
   if (!attributes && !ast_parent (ref, sym_compound_statement) && !ast_parent (ref, sym_parameter_declaration))
     str_append (references, ",.global=1");
+
+  /**
+  Is this a constant? */
+
+  if (ast_find (ast_parent (ref, sym_declaration),
+		sym_declaration_specifiers,
+		0, sym_type_qualifier,
+		0, sym_CONST))
+    str_append (references, ",.constant=1");
   
   /**
   Assumes 'double *' are references to arrays with 'nl'
