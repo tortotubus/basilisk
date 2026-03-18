@@ -59,6 +59,48 @@ void myfunc8 (scalar s)
     s[] = 0;
 }
 
+double myfunc9 (int n, double a[n])
+{
+  return a[0];
+}
+
+void myfunc10 (double a[3])
+{
+  a[2] = 1.;
+}
+
+double myfunc11 (double a[3])
+{
+  return myfunc9 (3, a);
+}
+
+static
+double myfunc12 (int n, double a[n])
+{
+  a[2] = 3;
+  return myfunc9 (n, a);
+}
+
+void myfunc13 (int n, double a[n])
+{
+  a[0] = 2;
+  return;
+}
+
+double myfunc14 (int n)
+{
+  int a[n];
+  return a[0];
+}
+
+double myfunc15()
+{
+  const int m = 4;
+  int a[m];
+  a[0] = 1;
+  return a[0];
+}
+
 attribute {
   double (* func) (double x);
 }
@@ -549,6 +591,39 @@ int main (int argc, char * argv[])
       coord v1 = {0, -1, 2}, v2 = {1}; // needs a second and third coordinate
       foreach_dimension()
 	v.x[] = v0.x = v1.x = v2.x;
+    }
+  }
+
+  /**
+  ## Arrays are passed by reference (as in C) */
+
+  {
+    init_grid (1);
+    foreach() {
+      double a[3] = {0,0,0};
+      myfunc10 (a);
+      s[] = a[2];
+    }
+    foreach (serial)
+      assert (s[] == 1.);
+  } 
+  
+  /**
+  ## Variable-size (multi-dimensional) arrays */
+  
+  {
+    init_grid (1);
+    foreach() {
+      const int n = 3; // must be a const
+      double a[n*n][n+1];
+      s[] = a[2][0];
+      double b[3];
+      s[] = myfunc9 (3, b);
+      s[] = myfunc11 (b);
+      s[] = myfunc12 (3, b);
+      myfunc13 (3, b);
+      myfunc14 (3);
+      myfunc15 ();
     }
   }
   

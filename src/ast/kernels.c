@@ -702,7 +702,7 @@ static void postmacros (Ast * n, Stack * stack, void * data)
 {
   if (n->sym == sym_statement || n->sym == sym_function_call) {
     KernelData * d = data;
-    ast_macro_replacement (n, n, stack, d->nolineno, 1, false, &d->return_macro_index, d->macroscope);
+    ast_macro_replacement (n, n, stack, d->nolineno, 1, false, true, &d->return_macro_index, d->macroscope);
   }
 }
 

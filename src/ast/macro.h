@@ -204,9 +204,10 @@ macros.*
 
 typedef struct {
   Ast * statement, * arguments, * parameters, * call, * initial, * scope;
+  Ast * variable_size_array, * expression_statement;
   Stack * sparameters;
   int * returnindex, label;
-  bool nolineno, complex_call;
+  bool nolineno, complex_call, variable_size_arrays;
   int postmacros;
 } MacroReplacement;
 
@@ -476,28 +477,27 @@ static void replace_break (Ast * n, Ast * breaking, Ast * parent)
 static void replace_return (Ast * n, Stack * stack, void * data)
 {
   if (n->sym == sym_RETURN) {
-    Ast * a = ast_parent (n, sym_block_item);
-    while (a && ast_last_child (a->parent) == a) {
-      a = ast_parent (a, sym_compound_statement);
-      while (a->sym == sym_compound_statement)
-	a = a->parent;
-      if (a->sym == sym_function_definition)
-	break;
-      a = ast_parent (a, sym_block_item);
-    }
-    if (!a || a->sym != sym_function_definition) {
+    MacroReplacement * r = data;
+    Ast * list = ast_schema (ast_parent (n, sym_compound_statement), sym_compound_statement,
+                             1, sym_block_item_list);
+    if (n != ast_schema (ast_child (list, sym_block_item), sym_block_item,
+                         0, sym_statement,
+                         0, sym_jump_statement,
+                         0, sym_RETURN)) {
       fprintf (stderr, "%s:%d: error: can only return at the end of a macro\n",
 	       ast_terminal (n)->file, ast_terminal (n)->line);
-      ast_print_tree (ast_parent (n, sym_function_definition), stderr, 0, 0, 12);
-      ast_print_tree (a, stderr, 0, 0, 3);
+      if (r->variable_size_array) {
+        AstTerminal * t = ast_left_terminal (r->variable_size_array);
+        fprintf (stderr, "%s:%d: note: the function is treated as a macro because it uses a variable-sized array here\n",
+                 t->file, t->line);
+      }
       exit (1);
     }
 
     Ast * expr = ast_schema (n->parent, sym_jump_statement,
 			     1, sym_expression);
-    MacroReplacement * r = data;
     if (!expr) {
-      if (r->call->sym == sym_function_call) {
+      if (r->call->sym == sym_function_call && !r->variable_size_array) {
 	fprintf (stderr, "%s:%d: error: 'void' return value in a macro returning non-void\n",
 		 ast_terminal (n)->file, ast_terminal (n)->line);
 	exit (1);
@@ -507,6 +507,15 @@ static void replace_return (Ast * n, Stack * stack, void * data)
       ast_destroy (n);
       parent->child[0] = parent->child[1];
       parent->child[1] = NULL;
+      return;
+    }
+    else if (r->expression_statement) {
+      Ast * parent = ast_parent (n, sym_jump_statement);
+      parent->sym = sym_expression_statement;
+      ast_destroy (n);
+      parent->child[0] = parent->child[1];
+      parent->child[1] = parent->child[2];
+      parent->child[2] = NULL;
       return;
     }
 
@@ -581,12 +590,13 @@ static void replace_macros (Ast * n, Stack * stack, void * data)
 {
   if (n->sym == sym_statement || n->sym == sym_function_call) {
     MacroReplacement * r = data;
-    ast_macro_replacement (n, r->initial, stack, r->nolineno, r->postmacros, true, r->returnindex, r->scope);
+    ast_macro_replacement (n, r->initial, stack, r->nolineno, r->postmacros, true, r->variable_size_arrays, r->returnindex, r->scope);
   }
 }
 
 void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
-			    bool nolineno, int postmacros, bool expand_definitions,
+			    bool nolineno, int postmacros,
+                            bool expand_definitions, bool expand_variable_size_arrays,
 			    int * return_macro_index, Ast * scope)
 {
   Ast * identifier, * macro_statement = ast_schema (statement, sym_statement,
@@ -599,8 +609,26 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 				     0, sym_primary_expression,
 				     0, sym_MACRO)))
     macro_statement = statement;
-  if (!macro_statement)
-    return;
+  Ast * variable_size_array = NULL, * expression_statement = NULL;
+  if (!macro_statement) {
+    Ast * ref;
+    if (expand_variable_size_arrays &&
+        (identifier = ast_schema (statement, sym_function_call,
+                                  0, sym_postfix_expression,
+                                  0, sym_primary_expression,
+                                  0, sym_IDENTIFIER)) &&
+        (ref = ast_identifier_declaration (stack, ast_terminal (identifier)->start)) &&
+        !ast_parent (ref, sym_compound_statement) &&
+        (ref = ast_parent (ref, sym_function_definition)) &&
+        (variable_size_array = ast_variable_array_size (ref, stack))) {
+      identifier->sym = sym_MACRO;
+      macro_statement = statement;
+      expression_statement = ast_schema (ast_ancestor (ast_parent (statement, sym_assignment_expression), 2),
+                                         sym_expression_statement);
+    }
+    else
+      return;
+  }
 
   if (!strcmp (ast_terminal (identifier)->start, "OMP_PARALLEL"))
     return;
@@ -615,14 +643,13 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
       (inforeach (statement) || point_declaration (stack)))
     str_append (ast_terminal (identifier)->start, "_inner");
 
-  Ast * macro_definition = get_macro_definition (stack, identifier, scope);
-  if (postmacros >= 0) {
-    Ast * macrodef = ast_find (ast_schema (macro_definition, sym_function_definition,
-					   0, sym_function_declaration),
-			       sym_declaration_specifiers,
-			       0, sym_storage_class_specifier,
-			       0, sym_MACRODEF);
-    assert (macrodef);
+  Ast * macro_definition = get_macro_definition (stack, identifier, scope), * macrodef;
+  if (postmacros >= 0 &&
+      (macrodef = ast_find (ast_schema (macro_definition, sym_function_definition,
+                                        0, sym_function_declaration),
+                            sym_declaration_specifiers,
+                            0, sym_storage_class_specifier,
+                            0, sym_MACRODEF))) {
     const char * suffix = ast_terminal (macrodef)->start + 5;
     if (atoi (suffix) > postmacros)
       return;
@@ -639,6 +666,8 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 			      0, sym_direct_declarator,
 			      2, sym_parameter_type_list),
     .call = macro_statement,
+    .variable_size_array = variable_size_array,
+    .expression_statement = expression_statement,
     .nolineno = nolineno,
     .complex_call = !ast_schema (ast_find (macro_definition, sym_compound_statement),
 				 sym_compound_statement,
@@ -647,6 +676,7 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 				 0, sym_statement,
 				 0, sym_jump_statement,
 				 0, sym_RETURN),
+    .variable_size_arrays = expand_variable_size_arrays,
     .returnindex = return_macro_index,
     .postmacros = postmacros,
     .scope = scope,
@@ -677,6 +707,15 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 		       0, sym_BREAK))
 	np++;
   }
+  
+#if 0
+  fprintf (stderr, "***** replacing macro: \n");
+  ast_print (macro_statement, stderr, 0);
+  fprintf (stderr, "\n===== with: \n");
+  ast_print (ast_child (macro_definition, sym_function_declaration), stderr, 0);
+  ast_print (ast_child (macro_definition, sym_compound_statement), stderr, 0);
+  fputc ('\n', stderr);
+#endif
 
   if (na != np) {
     AstTerminal * t = ast_terminal (identifier);
@@ -690,15 +729,6 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 #endif
     exit (1);
   }
-  
-#if 0
-  fprintf (stderr, "***** replacing macro: \n");
-  ast_print (macro_statement, stderr, 0);
-  fprintf (stderr, "\n===== with: \n");
-  ast_print (ast_child (macro_definition, sym_function_declaration), stderr, 0);
-  ast_print (ast_child (macro_definition, sym_compound_statement), stderr, 0);
-  fputc ('\n', stderr);
-#endif
   
   /**
   Replace 'break' with its macro definition (if it exists). */
@@ -744,7 +774,7 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 
   /**
   Statement */
-  
+
   if (statement->sym == sym_statement) {
     if (statement->parent->sym == sym_block_item) {
       Ast * list = ast_schema (copy, sym_compound_statement,
@@ -804,6 +834,13 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
 			   expr), c);
       ast_destroy (copy);
     }
+    else if (expression_statement)
+      
+      /**
+      This is an expression statement expanding a function using variable-size arrays. */ 
+
+      ast_set_child (expression_statement->parent, ast_child_index (expression_statement), copy);
+
     else {
 
       /**
@@ -811,17 +848,26 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
       
       assert (r.complex_call);
 
-      Ast * returntype = ast_schema (macro_definition, sym_function_definition,
-				     0, sym_function_declaration,
-				     0, sym_declaration_specifiers,
-				     1, sym_declaration_specifiers);
+      Ast * returntype = NULL;
+
+      if (!variable_size_array)
+        returntype = ast_schema (macro_definition, sym_function_definition,
+                                 0, sym_function_declaration,
+                                 0, sym_declaration_specifiers,
+                                 1, sym_declaration_specifiers);
+      else
+        returntype = ast_schema (macro_definition, sym_function_definition,
+                                 0, sym_function_declaration,
+                                 0, sym_declaration_specifiers);
+      
       if (!returntype) {
 	fprintf (stderr, "%s:%d: error: the type of a macro returning a value must be defined\n",
 		 ast_left_terminal (macro_definition)->file,
 		 ast_left_terminal (macro_definition)->line);
+        ast_print_tree (macro_definition, stderr, 0, 0, -1);
 	exit (1);
       }
-
+      
       if (r.label < 0.) {
 	AstTerminal * t = ast_left_terminal (macro_definition);
 	fprintf (stderr, "%s:%d: error: macro '%s' must return a value\n",
