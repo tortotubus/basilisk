@@ -166,6 +166,7 @@ Ast * implicit_type_cast (Ast * n, Stack * stack)
 	str_prepend (ast_left_terminal (n->child[0])->before, "bool(");
 	ast_after (n->child[0], ")");
       }
+      implicit_type_cast (n->child[4], stack);
       return implicit_type_cast (n->child[2], stack);
     }
     break;
