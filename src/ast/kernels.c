@@ -579,6 +579,21 @@ void kernel (Ast * n, Stack * stack, void * data)
     if (!identifier) break;
     AstTerminal * t = ast_terminal (identifier);
     if (!t) break;
+
+    /**
+    ## Assertions 
+    
+    We just remove 'qassert(...)' statements. */
+
+    if (!strcmp (t->start, "qassert")) {
+      Ast * parent = ast_parent (n, sym_expression);
+      assert (parent && parent->parent->sym == sym_expression_statement);
+      parent = parent->parent;
+      ast_destroy (parent->child[0]);
+      parent->child[0] = parent->child[1];
+      parent->child[1] = NULL;
+      break;
+    }    
     
     /**
     ## Field assignments 

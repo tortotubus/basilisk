@@ -341,7 +341,6 @@ static char * str_append_array (char * dst, const char * list[])
 static char glsl_preproc[] =
   "// #line " xstr(LINENO) " " __FILE__ "\n"
   "#define dimensional(x)\n"
-  "#define qassert(file, line, cond)\n"
   "#define fmin(a,b) min(a,b)\n"
   "#define fmax(a,b) max(a,b)\n"
 #if !SINGLE_PRECISION
