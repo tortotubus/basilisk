@@ -59,7 +59,7 @@ void myfunc8 (scalar s)
     s[] = 0;
 }
 
-double myfunc9 (int n, double a[n])
+double myfunc9 (const int n, double a[n])
 {
   return a[0];
 }
@@ -87,7 +87,7 @@ void myfunc13 (int n, double a[n])
   return;
 }
 
-double myfunc14 (int n)
+double myfunc14 (const int n)
 {
   int a[n];
   a[0] = 1;
@@ -102,7 +102,7 @@ double myfunc15()
   return a[0];
 }
 
-double myfunc16 (int n, int m)
+double myfunc16 (int n, const int m)
 {
   int a[m];
   a[0] = 1;
