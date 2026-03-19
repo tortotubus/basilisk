@@ -228,6 +228,12 @@ static Ast * argument_value (Ast * identifier, Stack * stack, const MacroReplace
       parameters = parameters->parent;
       assert (parameter);
       if (parameter == parent) {
+        if (r->variable_size_array && ast_schema (parameter, sym_parameter_declaration,
+                                                  1, sym_declarator,
+                                                  0, sym_direct_declarator,
+                                                  0, sym_generic_identifier,
+                                                  0, sym_IDENTIFIER))
+          return NULL;
 	value = argument;
 	break;
       }
@@ -757,6 +763,69 @@ void ast_macro_replacement (Ast * statement, Ast * initial, Stack * stack,
   Ast * copy = ast_copy (ast_find (macro_definition, sym_compound_statement));
   stack_push (stack, &copy);
   if (r.parameters) {
+    if (r.variable_size_array && ast_schema (copy, sym_compound_statement,
+                                             1, sym_block_item_list)) {
+      
+      /**
+      If the "macro" is a function using variable-size arrays, we
+      make a local copy of its parameters. */
+      
+      Ast * parameters = r.parameters->child[0];
+      foreach_item_r (parameters, sym_parameter_declaration, param) {
+        Ast * identifier;
+        if ((identifier = ast_schema (param, sym_parameter_declaration,
+                                      1, sym_declarator,
+                                      0, sym_direct_declarator,
+                                      0, sym_generic_identifier,
+                                      0, sym_IDENTIFIER))) {
+          Ast * size = r.variable_size_array; r.variable_size_array = NULL;
+          Ast * value = argument_value (identifier, stack, &r);
+          r.variable_size_array = size;
+          assert (value);
+          Ast * decl;
+          if (strcmp (ast_left_terminal (value)->start, ast_terminal (identifier)->start))
+            decl = NN(param, sym_declaration,
+                      ast_copy (param->child[0]),
+                      NN(param, sym_init_declarator_list,
+                         NN(param, sym_init_declarator,
+                            ast_copy (param->child[1]),
+                            NCB(param, "="),
+                            NN(param, sym_initializer,
+                               ast_copy (value->child[0])))),
+                      NCB(param, ";"));
+          else {
+            /** We are trying to assign 'name = name' so we need to use an intermediate value. */
+            char * tmpname = strdup ("_");
+            str_append (tmpname, ast_terminal (identifier)->start, "_");
+            AstTerminal * tmp = NB(param, sym_IDENTIFIER, tmpname);
+            tmp->before = strdup (" ");
+            decl = NN(param, sym_declaration,
+                      ast_copy (param->child[0]),
+                      NN(param, sym_init_declarator_list,
+                         NN(param, sym_init_declarator_list,
+                            NN(param, sym_init_declarator,
+                               NN(param, sym_declarator,
+                                  NN(param, sym_direct_declarator,
+                                     NN(param, sym_generic_identifier,
+                                        tmp))),
+                               NCB(param, "="),
+                               NN(param, sym_initializer,
+                                  ast_copy (value->child[0])))),
+                         NCB(param, ","),
+                         NN(param, sym_init_declarator,
+                            ast_copy (param->child[1]),
+                            NCB(param, "="),
+                            NN(param, sym_initializer,
+                               ast_attach (ast_new_unary_expression (param),
+                                           ast_new_identifier (param, tmpname))))),
+                      NCB(param, ";"));
+            free (tmpname);
+          }
+          assert (ast_block_list_insert_before2 (ast_find (copy, sym_block_item), decl));
+          r.complex_call = true;
+        }
+      }
+    }
     ast_traverse (copy, stack, replace_arguments, &r);
     stack_destroy (r.sparameters);
   }

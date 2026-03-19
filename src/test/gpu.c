@@ -90,6 +90,7 @@ void myfunc13 (int n, double a[n])
 double myfunc14 (int n)
 {
   int a[n];
+  a[0] = 1;
   return a[0];
 }
 
@@ -98,6 +99,14 @@ double myfunc15()
   const int m = 4;
   int a[m];
   a[0] = 1;
+  return a[0];
+}
+
+double myfunc16 (int n, int m)
+{
+  int a[m];
+  a[0] = 1;
+  n++;
   return a[0];
 }
 
@@ -617,14 +626,19 @@ int main (int argc, char * argv[])
       const int n = 3; // must be a const
       double a[n*n][n+1];
       s[] = a[2][0];
-      double b[3];
+      double b[3] = {0,0,0};
       s[] = myfunc9 (3, b);
       s[] = myfunc11 (b);
       s[] = myfunc12 (3, b);
       myfunc13 (3, b);
       myfunc14 (3);
       myfunc15 ();
+      int m = 56;
+      myfunc16 (m, 2);
+      s[] = m;
     }
+    foreach(serial)
+      fprintf (stderr, "35) %g\n", s[]);
   }
   
   /**
