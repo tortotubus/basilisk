@@ -640,6 +640,18 @@ int main (int argc, char * argv[])
     foreach(serial)
       fprintf (stderr, "35) %g\n", s[]);
   }
+
+  /**
+  ## Automatic type cast */
+
+  {
+    init_grid (1);
+    int i = 2;
+    foreach() {
+      bool b = i;
+      s[] = b;
+    }
+  }  
   
   /**
   ## Other tests */
