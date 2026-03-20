@@ -210,6 +210,71 @@ can be useful when debugging GPU codes and used in combination with
 the `-cpu` [compilation flag](/src/qcc.c) which will force loops to
 run on the CPU by default.
 
+### Variable-size arrays
+
+In C99 variable-size arrays can be defined simply using for example
+
+~~~c
+void func1 (int n, double a[n]) {
+  ...
+}
+...
+{
+  int m = ...;
+  double b[m];
+  func (m, b);
+}
+~~~
+
+Since this relies on dynamic memory allocation on the stack, this is
+not possible in general in GLSL. The only cases where this will work
+is if the size of the array can be computed "statically" i.e. at the
+time the GLSL kernel is compiled. Furthermore, the GLSL compiler is
+strict (or not very clever) and a code looking like
+
+~~~c
+int n = 3;
+double a[n];
+~~~
+
+will fail with an error like
+
+~~~bash
+GLSL: error: array size must be a constant valued expression
+~~~
+
+To fix this one needs to write instead
+
+~~~c
+const int n = 3;
+double a[n];
+~~~
+
+Note that the size of the array must be a constant, but only at the
+time when the GLSL kernel is compiled. This allows using variable-size
+arrays also in GLSL, provided their size is constant within the
+kernel. For example the following code will work fine on the GPU, even
+if `n` changes between calls to `func2()`.
+
+~~~literatec
+void func2 (const int n) {
+  foreach() {
+    const int size = n + 1;
+    double a[size];
+    ...
+  }
+}
+~~~
+
+Finally, using variable-sized arrays as function parameters, as
+done in `func1()` above, is not allowed in GLSL. To work around this
+strong limitation, the [kernel preprocessor](/src/ast/kernels.c) will
+expand calls to functions using variable-size arrays (using the
+[macro](/src/ast/macro.h) engine). Note that this means that the
+function must respect the constraints applying to macros, in
+particular they [can return only at the end of the
+function](/src/ast/macro.h#complex-return-macros).
+
 ### What cannot be done on GPUs
 
 * Inputs/Outputs: The only possible direct output on GPUs is the screen (see
