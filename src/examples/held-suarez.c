@@ -293,10 +293,14 @@ int main()
   TOLERANCE = 0.1;
 
   /**
-  Vertical remapping uses monotonic limiting. Note sure whether this
-  is required. */
+  The solution is sensitive to limiting in the vertical remapping,
+  probably due to the changes this induces in the top and bottom
+  boundary conditions. Using monotonic limiting leads to higher
+  stratospheric temperature variance, as well as the appearance of an
+  "equatorial soliton". Results closer to the reference numerical
+  results are obtained without limiting. */
   
-  cell_lim = mono_limit;
+  //  cell_lim = mono_limit;
   
   run();
 
@@ -493,8 +497,6 @@ calls    total     self   % total   function
 * Using `z` as name for vertical coordinate is confusing.
 * The dimension of the vertical coordinate should not be a length, as
   imposed by [/src/layered/hydro.h](/src/layered/hydro.h#175).
-* There is a strange "equatorial solitary wave" clearly visible in the
-  [movie of surface pressure](held-suarez/eta_r.mp4).
 * Vertical remapping could/should be optimised.
 
 ## See also
