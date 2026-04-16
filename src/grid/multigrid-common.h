@@ -408,6 +408,7 @@ void multigrid_debug (Point point)
   fclose (plot);
 }
 
+trace
 static void multigrid_restriction (scalar * list)
 {
   scalar * listdef = NULL, * listc = NULL, * list2 = NULL;
