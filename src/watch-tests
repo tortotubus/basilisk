@@ -20,7 +20,7 @@ function progress()
     find . -name fail
 }
 
-sync=no
+sync=nosync
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case $1 in
