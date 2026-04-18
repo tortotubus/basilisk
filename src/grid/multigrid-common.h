@@ -22,6 +22,18 @@ attribute {
   void (* restriction)  (Point, scalar);
 }
 
+void set_prolongation (scalar s, void (* prolongation) (Point, scalar))
+{
+  s.prolongation = prolongation;
+  set_dirty_stencil (s);
+}
+
+void set_restriction (scalar s, void (* restriction) (Point, scalar))
+{
+  s.restriction = restriction;
+  set_dirty_stencil (s);
+}
+
 // Multigrid methods
 
 void (* restriction) (scalar *);
