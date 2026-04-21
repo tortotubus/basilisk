@@ -154,6 +154,7 @@ int tag (scalar t)
 	}
       boundary_level ({t}, l);
     }
+    t.stencil.bc &= ~s_restriction;
   } while (changed);
 
   /**
