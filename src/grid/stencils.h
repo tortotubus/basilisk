@@ -31,7 +31,7 @@ attribute {
 
 static void set_dirty_stencil (scalar s)
 {
-  s.stencil.bc &= ~(s_centered|s_face|s_restriction);
+  s.stencil.bc = 0;
 }
 
 typedef struct _External External;

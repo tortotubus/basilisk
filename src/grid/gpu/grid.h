@@ -2063,7 +2063,7 @@ bool gpu_end_stencil (ForeachData * loop,
     foreach_dimension()
       free (loop->listf.x), loop->listf.x = NULL;
     for (scalar s in loop->dirty)
-      s.stencil.bc |= s_centered|s_face;
+      s.stencil.bc = s_centered|s_face;
     free (loop->dirty), loop->dirty = NULL;
   }
   else {
