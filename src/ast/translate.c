@@ -4981,8 +4981,12 @@ void ast_traverse (Ast * n, Stack * stack,
   if (!n || n == ast_placeholder)
     return;
 
-  Ast * scope = ast_push_declarations (n, stack);
-
+  Ast * scope = NULL;
+  if (n->sym == sym_init_declarator)
+    ast_push_declaration (stack, n);
+  else if (n->sym != sym_declaration)
+    scope = ast_push_declarations (n, stack);
+  
   if (n->child)
     for (Ast ** c = n->child; *c; c++)
       ast_traverse (*c, stack, func, data);
