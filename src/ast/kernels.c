@@ -9,7 +9,7 @@
 typedef struct {
   char * error;
   int return_macro_index;
-  Ast * macroscope;
+  Ast * macroscope, * scope;
   KernelOptions opts;
 } KernelData;
 
@@ -217,6 +217,94 @@ Ast * implicit_type_cast (Ast * n, Stack * stack)
   return type;
 }
 
+static bool is_global_declaration (const Ast * ref)
+{
+  return (!ast_parent (ref, sym_compound_statement) &&
+          !ast_parent (ref, sym_parameter_declaration));
+}
+
+static
+bool is_local_declaration (Ast * n, Stack * stack, Ast * scope)
+{
+  if (!strcmp (ast_terminal (n)->start, "point"))
+    return true;
+  Ast ** d;
+  for (int i = 0; (d = stack_index (stack, i)); i++)
+    if (*d == n)
+      return true;
+    else if (*d == scope)
+      break;
+  Ast * list = ast_schema (scope, sym_macro_statement,
+                           2, sym_argument_expression_list);
+  if (list) {
+    foreach_item_r (list, sym_argument_expression_list_item, argument) {
+      Ast * reduction_list = ast_find (argument, sym_reduction_list);
+      if (reduction_list) {
+        foreach_item (reduction_list, 1, reduction) {
+          Ast * variable = ast_find (reduction, sym_reduction,
+                                     4, sym_reduction_array,
+                                     0, sym_generic_identifier,
+                                     0, sym_IDENTIFIER);
+          if (variable && !strcmp (ast_terminal (variable)->start,
+                                   ast_terminal (n)->start))
+            return true; // this is a reduction variable
+        }
+      }
+    }
+  }
+  return false;
+}
+
+static
+bool can_be_uniform (Ast * ref, Stack * stack, Ast * scope, bool * global)
+{
+  if (!ref)
+    return false;
+  if (ref->parent->sym == sym_enumeration_constant)
+    return false;
+  if (ast_find (ast_parent (ref, sym_declaration),
+                sym_declaration_specifiers,
+                0, sym_type_qualifier,
+                0, sym_CONST))
+    return false;
+  
+  *global = is_global_declaration (ref);
+  if (*global) {
+    if (!strcmp (ast_terminal (ref)->start, "N") ||
+        !strcmp (ast_terminal (ref)->start, "nl") ||
+        !strcmp (ast_terminal (ref)->start, "Dimensions"))
+      return false;
+  }
+  else if (is_local_declaration (ref, stack, scope))
+    return false;
+  
+  AstDimensions dim = {0};
+  Ast * type = ast_identifier_type (ref, &dim, stack);
+  if (type == (Ast *) &ast_function)
+    return false;
+  Ast * def;
+  if (ast_schema (ast_ancestor (type, 5), sym_declaration,
+		  0, sym_declaration_specifiers,
+		  0, sym_storage_class_specifier,
+		  0, sym_TYPEDEF) &&
+      (def = ast_schema (ast_ancestor (type, 5), sym_declaration,
+			 1, sym_init_declarator_list,
+			 0, sym_init_declarator,
+			 0, sym_declarator,
+			 0, sym_direct_declarator,
+			 0, sym_generic_identifier,
+			 0, sym_IDENTIFIER))) {
+    // typedef
+    if (strcmp (ast_terminal (def)->start, "coord") &&
+        strcmp (ast_terminal (def)->start, "_coord") &&
+        strcmp (ast_terminal (def)->start, "vec4") &&
+        strcmp (ast_terminal (def)->start, "ivec") &&
+        strcmp (ast_terminal (def)->start, "bool"))
+      return false;
+  }
+  return true;
+}
+
 static
 void kernel (Ast * n, Stack * stack, void * data)
 {
@@ -267,10 +355,41 @@ void kernel (Ast * n, Stack * stack, void * data)
 			  0, sym_primary_expression) &&
 	     !strcmp (ast_terminal (n)->start, "val"))
       free (ast_terminal (n)->start), ast_terminal (n)->start = strdup ("_val");
+
+    /**
+    ## References to global variables (i.e. "uniforms") */
+    
+    else if (!d->opts.glsl && n->parent->sym == sym_primary_expression &&
+             ast_parent (n, sym_compound_statement)) {
+      Ast * ref = ast_identifier_declaration (stack, ast_terminal (n)->start);
+      bool global = false;
+      if (can_be_uniform (ref, stack, d->scope, &global)) {
+        str_prepend (ast_terminal (n)->start, global ? "_GLOB_VAL_(" : "_LOC_VAL_(");
+        str_append (ast_terminal (n)->start, ")");
+      }
+    }
     
     break;
   }
-    
+
+  /**
+  ## Context for function definitions */
+
+  case sym_function_definition:
+    if (!d->opts.glsl) {
+      Ast * para = ast_schema (n->child[0], sym_function_declaration,
+                               1, sym_declarator,
+                               0, sym_direct_declarator,
+                               1, token_symbol('('));
+      if (para)
+        str_append (ast_terminal (para)->start,
+                    ast_schema (n->child[0], sym_function_declaration,
+                                1, sym_declarator,
+                                0, sym_direct_declarator,
+                                2, token_symbol(')')) ? "_GLOB_PARAMS0_ " : "_GLOB_PARAMS_ ");
+    }
+    break;
+     
   /**
   ## Assumes that pointers to structures are used through "inout" parameter */
 
@@ -422,6 +541,14 @@ void kernel (Ast * n, Stack * stack, void * data)
 				       2, sym_member_identifier,
 				       0, sym_generic_identifier,
 				       0, sym_IDENTIFIER);
+        if (!d->opts.glsl) {
+          Ast * para = ast_schema (n->parent, sym_function_call,
+                                   1, token_symbol('('));
+          if (para)
+            str_append (ast_terminal (para)->start,
+                        ast_schema (n->parent, sym_function_call,
+                                    2, token_symbol(')')) ? "_GLOB0_ " : "_GLOB_ ");
+        }
 	ast_before (n->parent, "_attr_", ast_terminal (identifier)->start, "(");
 	ast_terminal (ast_schema (n, sym_postfix_expression,
 				  1, token_symbol('.')))->start[0] = ',';
@@ -629,7 +756,7 @@ void kernel (Ast * n, Stack * stack, void * data)
       parent->child[0] = parent->child[1];
       parent->child[1] = NULL;
       break;
-    }    
+    }
     
     /**
     ## Field assignments 
@@ -657,6 +784,15 @@ void kernel (Ast * n, Stack * stack, void * data)
       d->error = strdup (s);
       return;
     }
+
+    if (!d->opts.glsl && strcmp (ast_terminal (identifier)->file, "ast/defaults.h")) {
+      Ast * para = ast_schema (n, sym_function_call,
+                               1, token_symbol('('));
+      if (para)
+        str_append (ast_terminal (para)->start,
+                    ast_schema (n, sym_function_call,
+                                2, token_symbol(')')) ? "_GLOB0_ " : "_GLOB_ ");
+    }
     
     /**
     ## Function pointers */
@@ -670,6 +806,9 @@ void kernel (Ast * n, Stack * stack, void * data)
       t->start = s;
       AstTerminal * o = ast_terminal (ast_child (n, token_symbol('(')));
       free (o->start); o->start = strdup ("((");
+      if (!d->opts.glsl)
+        str_append (o->start, ast_schema (n, sym_function_call,
+                                          2, token_symbol(')')) ? "_GLOB0_ " : "_GLOB_ ");
       AstTerminal * c = ast_terminal (ast_child (n, token_symbol(')')));
       free (c->start); c->start = strdup ("))");
       break;
@@ -762,9 +901,13 @@ char * ast_kernel (Ast * n, char * argument, KernelOptions opts, Ast * macroscop
   AstRoot * root = ast_get_root (n);
   Stack * stack = root->stack;
   stack_push (stack, &n);
-  KernelData d = {0, 0, macroscope, opts};
+  KernelData d = {0, 0, macroscope, NULL, opts};
   Ast * statement = n->sym == sym_function_definition ?
     ast_copy (n) : ast_copy (ast_child (n, sym_statement));
+  if (n->sym == sym_function_definition)
+    d.scope = statement;
+  else
+    d.scope = n;
   ast_traverse (statement, stack, postmacros, &d);
   ast_traverse (statement, stack, kernel, &d);
 

@@ -14,7 +14,7 @@ libgpu.a: glad.o opengl.o
 liberrors.a: errors.o
 	ar cr liberrors.a errors.o
 
-opengl.o: backend.h opengl.c reduction.c
+opengl.o: backend.h ../externals.h opengl.c reduction.c
 
 check:
 
