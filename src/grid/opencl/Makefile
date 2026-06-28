@@ -2,14 +2,14 @@
 
 CFLAGS += -I$(BASILISK) -I.. -DSINGLE_PRECISION -O2
 
-all: # libbuda.a
+all: # libocl.a
 
 # these are not Basilisk programs
-EXCLUDE = cuda.c
+EXCLUDE = opencl.c
 
-libbuda.a: cuda.o
-	ar cr libbuda.a cuda.o
+libocl.a: opencl.o
+	ar cr libocl.a opencl.o
 
-cuda.o: ../gpu/backend.h ../externals.h cuda.c
+opencl.o: ../gpu/backend.h ../externals.h opencl.c
 
 include ../../Makefile.defs

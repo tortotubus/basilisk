@@ -14,6 +14,8 @@
 #define swap(type,a,b) do { type _tmp_ = a; a = b; b = _tmp_; } while(false)
 
 typedef struct { double x, y, z; } coord;
+typedef struct { double x, y, z; } _coord;
+typedef struct { float r, g, b, a; } vec4;
 typedef float real;
 typedef struct { int i; } scalar;
 extern int datasize;

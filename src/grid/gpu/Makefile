@@ -2,7 +2,13 @@
 
 CFLAGS += -I$(BASILISK) -I.. -DSINGLE_PRECISION -O2
 
-all: libgpu.a liberrors.a
+# By default we only make liberrors.a because it does not depend on
+# external libraries, unlike libgpu.a
+
+all: liberrors.a
+
+# these are not Basilisk programs
+EXCLUDE = errors.c  glad.c  opengl.c  reduction.c
 
 # uncomment if errors.lex is modified
 # errors.c: errors.lex

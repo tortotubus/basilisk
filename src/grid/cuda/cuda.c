@@ -7,6 +7,22 @@ can be installed on Debian systems using:
 
 ~~~bash
 apt install nvidia-driver nvidia-cuda-dev
+cd $BASILISK/grid/cuda
+make libbuda.a
+~~~
+
+The [default Makefile](/src/Makefile.defs) provides a recipe to run a
+program using the cuda grid:
+
+~~~bashrc
+make myprogram.cuda.tst
+~~~
+
+The tests cases are:
+
+~~~bashrc
+cd $BASILISK/test
+make cuda-tests
 ~~~
 */
 
@@ -21,6 +37,8 @@ apt install nvidia-driver nvidia-cuda-dev
 #include "a32.h"
 
 typedef struct { double x, y, z; } coord;
+typedef struct { double x, y, z; } _coord;
+typedef struct { float r, g, b, a; } vec4;
 typedef float real;
 typedef struct { int i; } scalar;
 extern int datasize;

@@ -15,8 +15,23 @@ struct _External {
 };
 
 #if _GPU
+static size_t external_size (const External * g)
+{
+  switch (g->type) {
+  case sym_INT: return sizeof (int);
+  case sym_LONG: return sizeof (long);
+  case sym_FLOAT: return sizeof (float);
+  case sym_DOUBLE: return sizeof (double);
+  case sym__COORD: return sizeof (_coord);
+  case sym_COORD: return sizeof (coord);
+  case sym_BOOL: return sizeof (bool);
+  case sym_VEC4: return sizeof (vec4);
+  default: return 0;
+  }
+}
+
 static bool is_external_constant (const External * g) {
-  return g->constant && g->type == sym_INT && !g->data;
+  return g->constant && !g->data && external_size (g);
 }
 
 static bool is_normal_variable (const External * g)

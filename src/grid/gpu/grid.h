@@ -24,6 +24,11 @@ e.g. [CUDA](https://en.wikipedia.org/wiki/CUDA)) and is widely
 supported by graphics cards (with the notable exception of Apple
 graphics cards and some high-end "professional" Nvidia cards).
 
+Note that this is not the only option to run on GPUs and/or other
+accelerators: there are also Basilisk backends which support
+[CUDA](/src/grid/cuda/cuda.c), [HIP](/src/grid/hip/hip.c) and
+[OpenCL](/src/grid/opencl/opencl.c).
+
 ## Running on GPUs
 
 As described above, from a Basilisk perspective GPUs are just another
@@ -63,7 +68,7 @@ using
 ~~~bash
 sudo apt install libglfw3-dev
 cd $BASILISK/grid/gpu
-make
+make libgpu.a
 ~~~
 
 Note that you will also need the appropriate graphics card drivers
@@ -369,7 +374,8 @@ nsys-ui report*.nsys-rep
 * [GPU benchmarks](Benchmarks.md)
 * [Computation kernels](/src/ast/kernels.c)
 * [An experimental CUDA driver](/src/grid/cuda/cuda.c)
-* [An experimental HIP driver](/src/grid/cuda/hip.c)
+* [An experimental HIP driver](/src/grid/hip/hip.c)
+* [An experimental OpenCL driver](/src/grid/opencl/ocl.c)
 
 # Implementation */
 
@@ -381,12 +387,36 @@ GPUContext_t GPUContext = {
   .current_shader = -1,
 };
 
-#if _CUDA
-#    define DEFINITIONS              \
-  "struct ivec2 { int x, y; };\n" \
-  "typedef unsigned int uint;\n" \
-  "struct vec2 { float x, y; };\n" \
-  "struct vec3 { float x, y, z; };\n" \
+#if _OPENCL
+# define TYPEDEF(NAME, BODY) "typedef struct " BODY " " NAME ";\n"
+# define CAST(NAME, BODY) "(" NAME "){" BODY "}\n"
+# define _GLOB_PARAMS0 "__global real * _data, __constant struct _Ctx_ *_ctx_"
+# define DEFINITIONS                       \
+  "#define bool int\n"                     \
+  TYPEDEF("ivec2", "{ int x, y; }")        \
+  TYPEDEF("vec2", "{ float x, y; }")       \
+  TYPEDEF("vec3", "{ float x, y, z; }")    \
+  "#define forin(type,s,list) for (int _i = 0; _i < sizeof(list)/sizeof(type) - 1; _i++) { type s = list[_i];\n" \
+  "#define forin2(a,b,c,d) for (int _i = 0; _i < sizeof(c)/sizeof(a) - 1; _i++)" \
+  "  { a = c[_i]; b = d[_i];\n"                                         \
+  "#define forin3(a,b,e,c,d,f) for (int _i = 0; _i < sizeof(c)/sizeof(a) - 1; _i++)" \
+  "  { a = c[_i]; b = d[_i]; e = f[_i];\n"                              \
+  "#define layout(x)\n"                                                 \
+  "#define _GLOB0_ _data, _ctx_\n"                                      \
+  "#define _GLOB_ _data, _ctx_,\n"                                      \
+  "#define _GLOB_PARAMS0_ " _GLOB_PARAMS0 "\n"                          \
+  "#define _GLOB_PARAMS_ " _GLOB_PARAMS0 ",\n"                          \
+  "#define _GLOB_VAL_(x) (_ctx_->x)\n"            \
+  "#define _LOC_VAL_(x) (_local_.x)\n"
+#elif _CUDA
+# define TYPEDEF(NAME, BODY) "struct " NAME " " BODY ";\n"
+# define CAST(NAME, BODY) NAME "{" BODY "}\n"
+# define _GLOB_PARAMS0 "const struct _Ctx_ *_ctx_"
+# define DEFINITIONS                       \
+  "typedef unsigned int uint;\n"           \
+  TYPEDEF("ivec2", "{ int x, y; }")        \
+  TYPEDEF("vec2", "{ float x, y; }")       \
+  TYPEDEF("vec3", "{ float x, y, z; }")    \
   "__host__ __device__ inline int clamp(int x, int a, int b) { return max(a, min(x, b)); }\n" \
   "#define forin(type,s,list) for (int _i = 0; _i < sizeof(list)/sizeof(type) - 1; _i++) { type s = list[_i];\n" \
   "#define forin2(a,b,c,d) for (int _i = 0; _i < sizeof(c)/sizeof(a) - 1; _i++)" \
@@ -396,12 +426,16 @@ GPUContext_t GPUContext = {
   "#define layout(x)\n"                                                 \
   "#define _GLOB0_ _ctx_\n"                                             \
   "#define _GLOB_ _ctx_,\n"                                             \
-  "#define _GLOB_PARAMS0_ const struct _Ctx_ *_ctx_\n"                  \
-  "#define _GLOB_PARAMS_ const struct _Ctx_ *_ctx_,\n"                  \
+  "#define _GLOB_PARAMS0_ " _GLOB_PARAMS0 "\n"                          \
+  "#define _GLOB_PARAMS_ " _GLOB_PARAMS0 ",\n"                          \
   "#define _GLOB_VAL_(x) (_ctx_->x)\n"                                  \
-  "#define _LOC_VAL_(x) (_local_.x)\n"
-#else // !_CUDA
-#  define DEFINITIONS                                                   \
+  "#define _LOC_VAL_(x) (_local_.x)\n"                                  \
+  "#define __global\n"                                                  \
+  "#define fabs(x) abs(x)\n"
+#else // GLSL
+# define TYPEDEF(NAME, BODY) "struct " NAME " " BODY ";\n"
+# define CAST(NAME, BODY) NAME "(" BODY ")\n"
+# define DEFINITIONS                                                    \
   "#define forin(type,s,list) for (int _i = 0; _i < list.length() - 1; _i++) { type s = list[_i];\n" \
   "#define forin2(a,b,c,d) for (int _i = 0; _i < c.length() - 1; _i++)" \
   "  { a = c[_i]; b = d[_i];\n"                                         \
@@ -412,32 +446,29 @@ GPUContext_t GPUContext = {
   "#define _GLOB_PARAMS0_\n"                                            \
   "#define _GLOB_PARAMS_\n"                                             \
   "#define _GLOB_VAL_(x) x\n"                                           \
-  "#define _LOC_VAL_(x) (x)\n"
-#endif // !_CUDA
+  "#define _LOC_VAL_(x) (x)\n"                                          \
+  "#define fabs(x) abs(x)\n"
+#endif // GLSL
+
+#if MULTIGRID
+# define DIMDECL " ivec2 n;"
+#else
+# define DIMDECL " uint n;"
+#endif
+#if LAYERS
+# define LAYERSDECL " int l;"
+#else
+# define LAYERSDECL
+#endif
 
 const char glsl_preproc[] =
   "// #line " xstr(LINENO) " " __FILE__ "\n"
-#if _CUDA
-#if _HIP_AMD
-  "#define uniform __device__\n"
-#else
-  "#define uniform __constant__\n"
-#endif
-#endif
   DEFINITIONS
-#if _CUDA
-  "#define neighborp(_i,_j,_k) Point{point.i+_i,point.j+_j,point.level,point.n"
+  "#define neighborp(_i,_j,_k) " CAST("Point", "point.i+_i,point.j+_j,point.level,point.n"
 #if LAYERS
-  ",point.l"
+                                      ",point.l"
 #endif
-  "}\n"
-#else // !CUDA
-  "#define neighborp(_i,_j,_k) Point(point.i+_i,point.j+_j,point.level,point.n"
-#if LAYERS
-  ",point.l"
-#endif
-  ")\n"
-#endif // !_CUDA
+                                      )
   "#define dimensional(x)\n"
   "#define fmin(a,b) min(a,b)\n"
   "#define fmax(a,b) max(a,b)\n"
@@ -449,7 +480,6 @@ const char glsl_preproc[] =
   "#define coord vec3\n"
 #endif // !SINGLE_PRECISION
   "#define ivec ivec2\n"
-  "struct scalar { int i, index; };\n"
 #if dimension == 2
 #if SINGLE_PRECISION
   "#define _coord vec2\n"
@@ -460,20 +490,12 @@ const char glsl_preproc[] =
   "#define exp(x) exp(float(x))\n"
   "#define pow(x,y) pow(float(x), float(y))\n"
 #endif
-  "struct vector { scalar x, y; };\n"
-  "struct tensor { vector x, y; };\n"
+  TYPEDEF("scalar", "{ int i, index; }")
+  TYPEDEF("vector", "{ scalar x, y; }")
+  TYPEDEF("tensor", "{ vector x, y; }")
 #endif // dimension == 2
   "#define GHOSTS " xstr(GHOSTS) "\n"
-  "struct Point { int i, j, level;"
-#if MULTIGRID
-  " ivec2 n;"
-#else
-  " uint n;"
-#endif
-#if LAYERS
-  " int l;"
-#endif
-  "};\n"
+  TYPEDEF("Point", "{ int i, j, level;" DIMDECL LAYERSDECL "}")
   "#define field_size() _field_size\n"
   "#define ast_pointer(x) (x)\n"
   GPU_CODE()
@@ -497,7 +519,6 @@ const char glsl_preproc[] =
   "#define NOT_UNUSED(x)\n"
   "#define pi 3.14159265359f\n"
   "#define nodata (1e30f)\n"
-  "#define fabs(x) abs(x)\n"
   "const real z = 0.;\n"
   "const int ig = 0, jg = 0;\n"
 #if !_CUDA  
@@ -717,7 +738,7 @@ void hash_external (Adler32Hash * hash, const External * g, const ForeachData * 
     a32_hash_add (hash, pointer, size);
   }
   else if (is_external_constant(g))
-    a32_hash_add (hash, g->pointer, sizeof(int));
+    a32_hash_add (hash, g->pointer, external_size (g));
 }
 
 static
@@ -957,10 +978,17 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       fs = str_append (fs, "coord p = vec3((vsPoint*vsScale + vsOrigin)*L0 + vec2(X0, Y0),0);\n");
     }
     else if (is_external_constant (g)) {
-      // fixme: for the moment only 'const int' are considered, this could be generalised
-      char value[20];
+      char value[30];
       assert (g->pointer);
-      snprintf (value, 19, "%d", *((int *)g->pointer));
+      switch (g->type) {
+      case sym_INT: snprintf (value, 29, "%d", *((int *)g->pointer)); break;
+      case sym_LONG: snprintf (value, 29, "%ld", *((long *)g->pointer)); break;
+      case sym_FLOAT: snprintf (value, 29, "%.9gf", *((float *)g->pointer)); break;
+      case sym_DOUBLE: snprintf (value, 29, "%#.17g", *((double *)g->pointer)); break;
+      case sym_BOOL: snprintf (value, 29, "%d", *((bool *)g->pointer)); break;
+      default:
+        assert (false); // not implemented yet
+      }
       fs = str_append (fs, "const ", type_string (g), " ", EXTERNAL_NAME (g), "=", value, ";\n");
     }
     else if (strcmp (g->name, "Dimensions")) {
@@ -1047,7 +1075,10 @@ char * build_shader (External * externals, const ForeachData * loop,
 		     "].f[(_offset[(field)].j+(index))%", s, "]\n");
   }
   else
-#if _CUDA
+#if _OPENCL
+    fs = str_append (fs,
+		     "#define _data_val(field,index) _data[(field)*field_size() + (index)]\n");
+#elif _CUDA
     fs = str_append (fs,
 		     "#define _data_val(field,index) _ctx_->_data[(field)*field_size() + (index)]\n");
 #else
@@ -1070,7 +1101,11 @@ char * build_shader (External * externals, const ForeachData * loop,
     }
   
   if (attributes) {
+#if _OPENCL
+    fs = str_append (fs, "typedef struct {\n", attributes, "} _Attributes;\n");
+#else
     fs = str_append (fs, "struct _Attributes {\n", attributes, "};\n");
+#endif
     sysfree (attributes);
     int nindex = 0;
     for (scalar s in baseblock)
@@ -1168,7 +1203,7 @@ char * build_shader (External * externals, const ForeachData * loop,
   Global variables */
 
 #if _CUDA
-  fs = str_append (fs, "struct _Ctx_ {\n  real * _data;\n");
+  fs = str_append (fs, "struct _Ctx_ {\n  __global real * _data;\n");
   for (const External * g = externals; g; g = g->next)
     if (g->global && is_external_variable (g)) {
       fs = str_append (fs, "  const ");
@@ -1400,10 +1435,12 @@ static External * merge_externals (External * externals, const ForeachData * loo
     g->used = false;
     merged = merge_external (merged, &end, g, loop);
   }
+#if 1
   if (loop->dirty) {
     bc.used = false;
     merged = merge_external (merged, &end, &bc, loop);
   }
+#endif
   for (External * g = externals; g->name; g++)
     merged = merge_external (merged, &end, g, loop);
 #if PRINTEXTERNAL  
@@ -1432,10 +1469,15 @@ static char * shader_append_func (char * s, const ForeachData * loop, const Exte
   if (locals)
     s = str_append (s, "struct _Local {\n", locals, "};\n");
   s = str_append (s,
+#if _OPENCL
+                  "__kernel\n"
+#else // _CUDA
                   "extern \"C\" __global__\n"
-                  "void ", func, "(const _Ctx_ * _ctx_, const ivec2 csOrigin");
+#endif
+                  "void ", func, "(", _GLOB_PARAMS0 ", const ivec2 csOrigin"
+                  );
   if (locals)
-    s = str_append (s, ", const _Local _local_");
+    s = str_append (s, ", const struct _Local _local_");
   s = str_append (s, "){\n");
   return s;
 #else // !_CUDA
@@ -1561,13 +1603,16 @@ static Shader * compile_shader (ForeachData * loop,
     char d[20];
     snprintf (d, 19, "%d", region->level > 0 ? region->level - 1 : depth());
     shader = str_append (shader,
-#if _CUDA
-                         "Point point = {csOrigin.x + int(blockIdx.y * blockDim.y + threadIdx.y) + GHOSTS,"
-			 "csOrigin.y + int(blockIdx.x * blockDim.x + threadIdx.x) + GHOSTS,", d,
-#else // !_CUDA
+#if _OPENCL
+                         "Point point = {csOrigin.x + get_group_id(1)*get_local_size(1) + get_local_id(1) + GHOSTS,"
+                         "csOrigin.y + get_group_id(0)*get_local_size(0) + get_local_id(0) + GHOSTS,", d,
+#elif _CUDA
+                         "Point point = {csOrigin.x + int(blockIdx.y*blockDim.y + threadIdx.y) + GHOSTS,"
+			 "csOrigin.y + int(blockIdx.x*blockDim.x + threadIdx.x) + GHOSTS,", d,
+#else // GLSL
                          "Point point = {csOrigin.x + int(gl_GlobalInvocationID.y) + GHOSTS,"
 			 "csOrigin.y + int(gl_GlobalInvocationID.x) + GHOSTS,", d,
-#endif // !_CUDA
+#endif
 #if MULTIGRID
 			 ",{(1<<",d,")*Dimensions.x,(1<<",d,")*Dimensions.y}"
 #else

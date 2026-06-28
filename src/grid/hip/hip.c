@@ -9,7 +9,17 @@ can be installed on Debian systems using:
 
 ~~~bash
 apt install hipcc
+cd $BASILISK/grid/hip
+make libhipcuda.a
 ~~~
+
+for the HIP-on-CUDA version, or
+
+~~~bash
+make libhipamd.a
+~~~
+
+for the HIP on AMD version.
 
 Since the HIP driver interface is meant to be compatible with CUDA,
 this file was (mostly) translated automatically from the [CUDA
@@ -22,7 +32,22 @@ hipify-perl -hip-kernel-execution-syntax ../cuda/cuda.c | \
 
 In principle this should work on both NVidia and AMD cards. Note
 however that Basilisk GPU development is done on Nvidia cards so that
-the AMD version is not as well tested. */
+the AMD version is not as well tested.
+
+The [default Makefile](/src/Makefile.defs) provides a recipe to run a
+program using the hip grid:
+
+~~~bashrc
+make myprogram.hip.tst
+~~~
+
+The tests cases are:
+
+~~~bashrc
+cd $BASILISK/test
+make hip-tests
+~~~
+*/
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -35,6 +60,8 @@ the AMD version is not as well tested. */
 #include "a32.h"
 
 typedef struct { double x, y, z; } coord;
+typedef struct { double x, y, z; } _coord;
+typedef struct { float r, g, b, a; } vec4;
 typedef float real;
 typedef struct { int i; } scalar;
 extern int datasize;

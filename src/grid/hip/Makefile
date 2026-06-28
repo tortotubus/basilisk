@@ -2,7 +2,10 @@
 
 CFLAGS += -I$(BASILISK) -I.. -DSINGLE_PRECISION -O2
 
-all: libhipcuda.a libhipamd.a
+all: # libhipcuda.a libhipamd.a
+
+# these are not Basilisk programs
+EXCLUDE = hip.c
 
 libhipcuda.a: hipcuda.o
 	ar cr libhipcuda.a hipcuda.o
