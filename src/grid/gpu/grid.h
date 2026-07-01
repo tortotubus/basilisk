@@ -375,7 +375,7 @@ nsys-ui report*.nsys-rep
 * [Computation kernels](/src/ast/kernels.c)
 * [An experimental CUDA driver](/src/grid/cuda/cuda.c)
 * [An experimental HIP driver](/src/grid/hip/hip.c)
-* [An experimental OpenCL driver](/src/grid/opencl/ocl.c)
+* [An experimental OpenCL driver](/src/grid/opencl/opencl.c)
 
 # Implementation */
 
