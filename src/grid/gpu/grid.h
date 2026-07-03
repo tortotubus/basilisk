@@ -510,7 +510,8 @@ const char glsl_preproc[] =
   "#define _attr(s,member) (_attr[(s).index].member)\n"
   "#define endforin() }\n"
 #if LAYERS
-  "#define _index(a,m) ((a).i + (point.l + _layer + (m) < _attr(a,block) ? point.l + _layer + (m) : 0))\n"
+  "#define _index(a,m) ((a).i + (point.l + _GLOB_VAL_(_layer) + (m) < _attr(a,block) ? "
+  "point.l + _GLOB_VAL_(_layer) + (m) : 0))\n"
 #else
   "#define _index(a,m) ((a).i)\n"
 #endif
