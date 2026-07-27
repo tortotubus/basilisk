@@ -196,8 +196,15 @@ struct {
   true
 };
 
+/**
+This is the weight field used by the load balancer.
+By default, we assign equal weights, meaning all processors will have the 
+same number of cells.
+*/
+(const) scalar balance_weights[] = 1.;
+
 trace
-bool balance()
+bool balance((const) scalar w = unity)
 {
   if (npe() == 1)
     return false;
@@ -220,6 +227,7 @@ bool balance()
   grid->n = grid->tn = nl;
   grid->maxdepth = depth();
   long nmin = nl, nmax = nl;
+
   // fixme: do all reductions in one go
   mpi_all_reduce (nmax, MPI_LONG, MPI_MAX);
   mpi_all_reduce (nmin, MPI_LONG, MPI_MIN);
@@ -239,13 +247,15 @@ bool balance()
   else
     mpi.npe = npe();
 
-  if (nmax - nmin <= 1)
-    return false;
-  
+  boundary ({w});
+
   scalar newpid[];
-  double zn = z_indexing (newpid, mpi.leaves);
-  if (pid() == 0)
-    assert (zn + 1 == nt);
+  double tl = z_weights (newpid, w, mpi.leaves);
+  // We need to know the total load on all processors
+  mpi_all_reduce (tl, MPI_DOUBLE, MPI_MAX);
+ 
+  if (!(tl > 0))
+    return false;
   
   FILE * fp = NULL;
 #ifdef DEBUGCOND
@@ -260,7 +270,7 @@ bool balance()
   bool next = false, prev = false;
   foreach_cell_all() {
     if (is_local(cell)) {
-      int pid = balanced_pid (newpid[], nt, mpi.npe);
+      int pid = balanced_pid (newpid[], tl, mpi.npe);
       pid = clamp (pid, cell.pid - 1, cell.pid + 1);
       if (pid == pid() + 1)
 	next = true;
@@ -398,5 +408,7 @@ void mpi_boundary_update (scalar * list)
     set_dirty_stencil (s);
   grid->tn = 0; // so that tree is not "full" for the call below
   boundary (list);
-  while (balance());
+
+  while (balance (balance_weights));
 }
+
