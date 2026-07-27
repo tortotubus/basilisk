@@ -3,25 +3,28 @@
 
 This test is a modified version of [rotate.c](/src/test/rotate.c).
 The goal is to test the correct split of load between processors,
-given a user assinged scalar field 'weights', a representative of the
-computational load being carried out in a specific cell.  This is also a
-twin to the test [balance-rotate-auto.c](/src/test/balance-rotate-auto.c)
-where instead the weights are detected automatically.
+given a user assigned scalar field 'weights', a representative of the
+computational load being carried out in a specific cell.
+
+There are two versions of this test: [balance-rotate.c]() where the
+weights are given by the user and [balance-rotate-auto.c]() which uses
+the LB_AUTO compilation flag to automatically measure the load of each
+process.
 
 We advect a circular interface along a circular path. To simulate an
-inbalance in the load between cells, we add an intensive calculation
+imbalance in the load between cells, we add an intensive calculation
 only in the region marked by the 'c' field.
 
 The total load is defined as the sum of the individual weights of each
-cells.  Ideally, each processor gets total_load/n_proc amout of work.
-This is also the configuration that minimze the idle time between
-processor waiting for the other to finish their computations.  */
+cell. Ideally, each processor gets total_load/n_proc amount of work.
+This is also the configuration that minimizes the idle time between
+processors waiting for the other to finish their computations.  */
 
 #include "advection.h"
 #include "vof.h"
 
 /**
-Diagnostic functions needed for intresting statistics.  'balance_score'
+Diagnostic functions needed for interesting statistics. 'balance_score'
 computes the number of cells and the load assigned to each processor.
 'parallel_efficency' gives a quantitative measure of the imbalance.  */
 
@@ -53,7 +56,7 @@ double parallel_efficency (double* load) {
     if (load[ne] > max_load)
       max_load = load[ne];
   }
-  return (tot_load/npe())/max_load;
+  return max_load ? (tot_load/npe())/max_load : 1.;
 }
 
 /**
@@ -83,14 +86,18 @@ int main() {
 
 event init (i = 0) {
   fraction (c, circle(x,y));
+#if !LB_AUTO  
   balance_weights = new scalar;
+#endif
 }
 
 #define end 0.785398
 
 event velocity (i++) {
+#if !LB_AUTO  
   foreach()
     balance_weights[] = (c[] > 1e-10) ? 200. : 1.;
+#endif
 
 #if TREE
   double cmax = 1e-3;
@@ -104,12 +111,16 @@ event velocity (i++) {
 }
 
 event logfile (i++) {
-
   long ncells[npe()]; double load[npe()];
   balance_score (ncells, load, balance_weights);
 
   if (pid() == 0 && i > 1) {
-    fprintf (stderr, "%g %g ", t, parallel_efficency (load));
+    double ef = parallel_efficency (load);
+#if LB_AUTO
+    if (i > 10) // skip the initalization effect on the balancing
+      assert (ef > 0.9);
+#endif
+    fprintf (stderr, "%g %g ", t, ef);
     for (int ne = 0; ne < npe(); ne++) fprintf (stderr, "%ld ", ncells[ne]);
     for (int ne = 0; ne < npe(); ne++) fprintf (stderr, "%g ", load[ne]);
     fprintf (stderr, "\n");
@@ -119,6 +130,7 @@ event logfile (i++) {
 /**
 We simulate a hefty computational cost in the cell with a non-zero
 volume fraction. */
+
 event slowdown (i++) {
   timer ts = timer_start();
   foreach()
@@ -135,6 +147,10 @@ event slowdown (i++) {
 
   double eff = measured_efficiency (busy);   // collective: all ranks
   if (pid() == 0 && i > 1) {
+#if LB_AUTO
+    if (i > 10) // skip the initalization effect on the balancing
+      assert (eff > 0.5);
+#endif
     static FILE * fp = fopen ("perf", "w");
     fprintf (fp, "%g %g\n", t, eff);
     fflush (fp);
@@ -161,6 +177,7 @@ set yrange [0:1]
 
 plot "log" u 1:2 w l lw 3 lc "red" notitle
 ~~~
+
 ~~~gnuplot measured parallel efficiency
 set xlabel "Time"
 set ylabel "Measured parallel efficiency"
@@ -171,6 +188,7 @@ set yrange [0:1]
 # region (event slowdown), independent of the balance_weights cost model.
 plot "perf" u 1:2 w l lw 3 lc "blue" notitle
 ~~~
+
 ~~~gnuplot cells per processor (stacked)
 
 set title "Realtive cell share in each processor"
@@ -186,8 +204,8 @@ set grid front
 # leaving one stacked band per proc that sums to 100%.
 plot for [i=7:3:-1] "log" u 1:(100.*(sum [c=3:i] column(c))/(sum [c=3:7] column(c))) \
      w filledcurves x1 title sprintf("proc %d", i-3)
-
 ~~~
+
 ~~~gnuplot load per processor (stacked)
 
 set title "Realtive load share in each processor"
@@ -200,6 +218,5 @@ set grid front
 # 5 processes (-D_MPI=5): load values in columns 8..12.
 plot for [i=12:8:-1] "log" u 1:(100.*(sum [c=8:i] column(c))/(sum [c=8:12] column(c))) \
      w filledcurves x1 title sprintf("proc %d", i-8)
-
 ~~~
 */

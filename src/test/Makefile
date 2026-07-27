@@ -521,6 +521,8 @@ balance6.c: balance5.c
 balance6.tst: CC = mpicc -D_MPI=17
 balance7.tst: CC = mpicc -D_MPI=17
 balance-rotate.tst: CC = mpicc -D_MPI=5
+balance-rotate-auto.c: balance-rotate.c
+	ln -sf balance-rotate.c balance-rotate-auto.c
 balance-rotate-auto.tst: CC = mpicc -D_MPI=5
 balance-rotate-auto.tst: CFLAGS += -DLB_AUTO=1
 
