@@ -401,6 +401,48 @@ bool balance((const) scalar w = unity)
   return pid_changed;
 }
 
+/**
+## Automatic Load Balancing based on MPI wait time */
+
+#ifdef LB_AUTO
+
+/**
+Each core experience a total time t_wall = t_busy + t_wait. We want to
+extract t_busy = t_wall - t_wait, which is a measure of the computational
+effort carried out by that specific processor.  We exploit 'mpi_time',
+global accumulated time (per processor) of the MPI syncronization and
+communication time. */
+
+void trace_weights (scalar weights) {
+  static double wait_prev = 0., t_prev = -1.;
+  struct timeval tv; gettimeofday (&tv, NULL);
+  double now      = tv.tv_sec + tv.tv_usec/1e6; // wall clock
+  double wait_now = mpi_time;                    // comm+sync since start
+
+  if (t_prev < 0.) { // first call: initialize and return unity
+    t_prev = now; wait_prev = wait_now;
+    foreach()
+      weights[] = 1.;
+    return;
+  }
+  double dt_wall = now - t_prev; t_prev = now;
+  double dt_wait = wait_now - wait_prev; wait_prev = wait_now;
+
+  double t_busy = max (dt_wall - dt_wait, 0.);
+ 
+  // This is an approximate but ensures weights > 0 and convergence
+  double per_cell = grid->n > 0 ? t_busy/grid->n : 0.;
+
+  foreach()
+    weights[] = per_cell + 1e-30;
+}
+
+# ifndef LB_ITER
+#  define LB_ITER 1 // refresh weights every LB_ITER steps
+# endif
+
+#endif  // LB_AUTO
+
 void mpi_boundary_update (scalar * list)
 {
   mpi_boundary_update_buffers();
@@ -408,6 +450,21 @@ void mpi_boundary_update (scalar * list)
     set_dirty_stencil (s);
   grid->tn = 0; // so that tree is not "full" for the call below
   boundary (list);
+
+#if LB_AUTO
+  /**
+  *weights* remains the constant unity placeholder (i.e. uniform
+  balancing) until trace_weights() is ready to fill it with measured
+  values. Allocating it earlier would leave unset values on cells
+  created by grid changes (e.g. during init_grid() refinement). */
+  static int last = -1;
+  if (iter > 0 && iter >= last + LB_ITER) {
+    if (is_constant (balance_weights))
+      balance_weights = new scalar;
+    last = iter;
+    trace_weights (balance_weights);
+}
+#endif
 
   while (balance (balance_weights));
 }
