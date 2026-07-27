@@ -1247,7 +1247,7 @@ static int balanced_pid (double cw, double tw, int nproc) {
 
 // static partitioning: only used for tests
 trace
-void mpi_partitioning((const) scalar w = unity)
+void mpi_partitioning ((const) scalar w = unity)
 {
   prof_start ("mpi_partitioning");
 
@@ -1418,6 +1418,7 @@ void restore_mpi (FILE * fp, scalar * list1)
 
 /**
 ## *z_weights()*: fills *cw* with the cumulative z-ordering weights.
+
 If `leaves` is `true` only leaves are used, otherwise all active cells.
 
 On the master process (`pid() == 0`), the function returns the total load
@@ -1429,17 +1430,19 @@ given a weight scalar field w;
 ~~~literatec
 scalar w[];
 double rw = 0; // running weight 
-foreach() {
+foreach (serial) {
   cw[] = rw;   // weight of all leaves *before* this one
   rw += w[];
-} ~~~
+}
+~~~
 
 in parallel, this is a bit more difficult. */
 
 trace
 double z_weights (scalar cw, (const) scalar w, bool leaves)
 {
-  /** This function fills 'cw' with the cumulative-weight computed along
+  /**
+  This function fills 'cw' with the cumulative-weight computed along
   the z-order for each cell given a weight scalar field 'w' (if 'leaves'
   is true, only leaves are counted).
 
@@ -1536,7 +1539,7 @@ On a single processor, we would just need something like (for leaves):
 
 ~~~literatec
 double i = 0;
-foreach()
+foreach (serial)
   index[] = i++;
 ~~~
 */

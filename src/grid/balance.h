@@ -197,14 +197,14 @@ struct {
 };
 
 /**
-This is the weight field used by the load balancer.
-By default, we assign equal weights, meaning all processors will have the 
-same number of cells.
-*/
+This is the weight field used by the load balancer.  By default, we
+assign equal weights, meaning all processors will have the same number
+of cells. */
+
 (const) scalar balance_weights[] = 1.;
 
 trace
-bool balance((const) scalar w = unity)
+bool balance ((const) scalar w = unity)
 {
   if (npe() == 1)
     return false;
@@ -227,7 +227,6 @@ bool balance((const) scalar w = unity)
   grid->n = grid->tn = nl;
   grid->maxdepth = depth();
   long nmin = nl, nmax = nl;
-
   // fixme: do all reductions in one go
   mpi_all_reduce (nmax, MPI_LONG, MPI_MAX);
   mpi_all_reduce (nmin, MPI_LONG, MPI_MIN);
@@ -254,7 +253,7 @@ bool balance((const) scalar w = unity)
   // We need to know the total load on all processors
   mpi_all_reduce (tl, MPI_DOUBLE, MPI_MAX);
  
-  if (!(tl > 0))
+  if (tl <= 0)
     return false;
   
   FILE * fp = NULL;
@@ -430,7 +429,7 @@ void trace_weights (scalar weights) {
 
   double t_busy = max (dt_wall - dt_wait, 0.);
  
-  // This is an approximate but ensures weights > 0 and convergence
+  // This is approximate but ensures weights > 0 and convergence
   double per_cell = grid->n > 0 ? t_busy/grid->n : 0.;
 
   foreach()
@@ -457,6 +456,7 @@ void mpi_boundary_update (scalar * list)
   balancing) until trace_weights() is ready to fill it with measured
   values. Allocating it earlier would leave unset values on cells
   created by grid changes (e.g. during init_grid() refinement). */
+  
   static int last = -1;
   if (iter > 0 && iter >= last + LB_ITER) {
     if (is_constant (balance_weights))
@@ -468,4 +468,3 @@ void mpi_boundary_update (scalar * list)
 
   while (balance (balance_weights));
 }
-

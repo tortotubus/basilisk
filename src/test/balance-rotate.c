@@ -190,8 +190,7 @@ plot "perf" u 1:2 w l lw 3 lc "blue" notitle
 ~~~
 
 ~~~gnuplot cells per processor (stacked)
-
-set title "Realtive cell share in each processor"
+set title "Relative cell share for each processor"
 set xlabel "Time"
 set ylabel "% cells"
 set yrange [0:100]
@@ -207,8 +206,7 @@ plot for [i=7:3:-1] "log" u 1:(100.*(sum [c=3:i] column(c))/(sum [c=3:7] column(
 ~~~
 
 ~~~gnuplot load per processor (stacked)
-
-set title "Realtive load share in each processor"
+set title "Relative load share for each processor"
 set xlabel "Time"
 set ylabel "% load"
 set yrange [0:100]
