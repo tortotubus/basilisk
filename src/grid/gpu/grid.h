@@ -963,12 +963,18 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       snprintf (nl, 19, "%d", *((int *)g->pointer));
       fs = str_append (fs, "const int nl = ", nl, ";\n");
     }
-    else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_x"))
-      fs = str_append (fs, "const int bc_period_x = ", Period.x ?
-                       "int(N*Dimensions.x)" : "-1", ";\n");
-    else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_y"))
-      fs = str_append (fs, "const int bc_period_y = ", Period.y ?
-                       "int(N*Dimensions.y)" : "-1", ";\n");
+    else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_x")) {
+      char s[20] = "-1";
+      if (Period.x)
+        snprintf (s, 19, "int(N*%d)", Dimensions.x);
+      fs = str_append (fs, "const int bc_period_x = ", s, ";\n");
+    }
+    else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_y")) {
+      char s[20] = "-1";
+      if (Period.y)
+        snprintf (s, 19, "int(N*%d)", Dimensions.y);
+      fs = str_append (fs, "const int bc_period_y = ", s, ";\n");
+    }
     else if (GPUContext.fragment_shader && (region->n.x > 1 || region->n.y > 1) &&
              g->type == sym_COORD && !strcmp (g->name, "p")) {
 
@@ -1931,7 +1937,15 @@ bool gpu_end_stencil (ForeachData * loop,
   if (on_gpu) {
     on_gpu = doloop_on_gpu (loop, region, externals, kernel);
     if (!on_gpu) {
-      fprintf (stderr, "%s:%d: %s: foreach() done on CPU (see GLSL errors above)\n",
+      fprintf (stderr, "%s:%d: %s: foreach() done on CPU (see "
+#if _OPENCL
+               "OpenCL"
+#elif _CUDA
+               "CUDA"
+#else
+               "GLSL"
+#endif
+               " errors above)\n",
 	       loop->fname, loop->line, loop->parallel == 3 ? "error" : "warning");
       if (loop->parallel == 3) // must run on GPU but cannot run
 	exit (1);
