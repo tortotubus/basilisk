@@ -1646,7 +1646,7 @@ static Shader * compile_shader (ForeachData * loop,
       if (g->reduct == '+')
         shader = str_append (shader, "0.;\n");
       else
-        shader = str_append (shader, "_LOC_VAL_(", EXTERNAL_NAME (g), ");\n");
+        shader = str_append (shader, g->global ? "_GLOB_VAL_(" : "_LOC_VAL_(", EXTERNAL_NAME (g), ");\n");
       shader = str_append (shader, "const scalar ", g->name, "_out_ = ");
       shader = write_scalar (shader, g->s);
       shader = str_append (shader, ";\n");
