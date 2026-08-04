@@ -998,7 +998,7 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       }
       fs = str_append (fs, "const ", type_string (g), " ", EXTERNAL_NAME (g), "=", value, ";\n");
     }
-    else if (strcmp (g->name, "Dimensions")) {
+    else if (strcmp (g->name, "Dimensions") && g->reduct != '+') {
 #if !_CUDA
       fs = str_append (fs, "uniform ");
       fs = external_declaration (fs, g);
@@ -1642,8 +1642,11 @@ static Shader * compile_shader (ForeachData * loop,
       shader = external_write (shader, g, loop, region, nwg);    
     if (g->reduct) {
       shader = str_append (shader, type_string (g), " ",
-                           g->global == 2 ? "_loc_" : "", g->name, " = _LOC_VAL_(",
-                           EXTERNAL_NAME (g), ");\n");
+                           g->global == 2 ? "_loc_" : "", g->name, " = ");
+      if (g->reduct == '+')
+        shader = str_append (shader, "0.;\n");
+      else
+        shader = str_append (shader, "_LOC_VAL_(", EXTERNAL_NAME (g), ");\n");
       shader = str_append (shader, "const scalar ", g->name, "_out_ = ");
       shader = write_scalar (shader, g->s);
       shader = str_append (shader, ";\n");
@@ -1914,11 +1917,20 @@ static bool doloop_on_gpu (ForeachData * loop, const RegionParameters * region,
       fprintf (stderr, "%s:%d: %s %c %g\n",
 	       loop->fname, loop->line, g->name, g->reduct, result);
 #endif
-      if (g->type == sym_DOUBLE) *((double *)g->pointer) = result;
-      else if (g->type == sym_FLOAT) *((float *)g->pointer) = result;
-      else if (g->type == sym_INT) *((int *)g->pointer) = result;
-      else
-	assert (false);
+      if (g->reduct == '+') {
+        if (g->type == sym_DOUBLE) *((double *)g->pointer) += result;
+        else if (g->type == sym_FLOAT) *((float *)g->pointer) += result;
+        else if (g->type == sym_INT) *((int *)g->pointer) += result;
+        else
+          assert (false);
+      }
+      else {
+        if (g->type == sym_DOUBLE) *((double *)g->pointer) = result;
+        else if (g->type == sym_FLOAT) *((float *)g->pointer) = result;
+        else if (g->type == sym_INT) *((int *)g->pointer) = result;
+        else
+          assert (false);
+      }
       delete ({s});
     }
   if (nreductions)

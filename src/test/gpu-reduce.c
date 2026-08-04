@@ -56,4 +56,14 @@ int main (int argc, char * argv[])
   foreach_level(0, reduction(+:sum))
     sum += s[]*dv();
   fprintf (stderr, "sum: %g %g\n", stat.sum, sum);
+
+  /**
+  Check that sum reductions work also when the initial value is not zero. */
+
+  foreach()
+    s[] = 1.;
+  sum = 1.;
+  foreach (reduction(+:sum))
+    sum += s[];
+  fprintf (stderr, "sum: %f\n", sum);
 }
