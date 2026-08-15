@@ -31,6 +31,17 @@ static GLuint position_vbo;
 static GLuint normal_vbo;
 static GLuint color_vbo;
 static GLuint index_vbo;
+
+static GLint constant_color;
+static GLint use_constant_color;
+static bool constant_color_enabled;
+static float constant_color_value[3];
+
+static GLint constant_normal;
+static GLint use_constant_normal;
+static bool constant_normal_enabled;
+static float constant_normal_value[3];
+
 static GLuint program;
 
 static size_t index_count;
@@ -243,7 +254,6 @@ static GLuint compile_shader (GLenum type, const char *source)
   return shader;
 }
 
-
 static GLuint create_program (void)
 {
   static const char *vertex_source =
@@ -255,18 +265,25 @@ static GLuint create_program (void)
     "\n"
     "uniform mat4 modelview;\n"
     "uniform mat4 projection;\n"
+    "uniform vec3 constant_normal;\n"
+    "uniform bool use_constant_normal;\n"
+    "uniform vec3 constant_color;\n"
+    "uniform bool use_constant_color;\n"
     "\n"
+    "out vec3 vertex_normal;\n"
     "out vec3 vertex_color;\n"
     "\n"
     "void main ()\n"
     "{\n"
     "  gl_Position = projection * modelview * vec4 (position, 1.);\n"
-    "  vertex_color = color;\n"
+    "  vertex_normal = use_constant_normal ? constant_normal : normal;\n"
+    "  vertex_color = use_constant_color ? constant_color : color;\n"
     "}\n";
 
   static const char *fragment_source =
     "#version 430\n"
     "\n"
+    "in vec3 vertex_normal;\n"
     "in vec3 vertex_color;\n"
     "out vec4 frag_color;\n"
     "\n"
@@ -275,48 +292,18 @@ static GLuint create_program (void)
     "  frag_color = vec4 (vertex_color, 1.);\n"
     "}\n";
 
-  GLuint vertex;
-  GLuint fragment;
-  GLuint result;
-  GLint status;
-  char log[4096];
+  GLuint vertex_shader = compile_shader (GL_VERTEX_SHADER, vertex_source);
+  GLuint fragment_shader = compile_shader (GL_FRAGMENT_SHADER, fragment_source);
+  GLuint program = glCreateProgram ();
 
-  vertex = compile_shader (GL_VERTEX_SHADER, vertex_source);
-  fragment = compile_shader (GL_FRAGMENT_SHADER, fragment_source);
+  glAttachShader (program, vertex_shader);
+  glAttachShader (program, fragment_shader);
+  glLinkProgram (program);
 
-  if (!vertex || !fragment) {
-    if (vertex)
-      glDeleteShader (vertex);
-    if (fragment)
-      glDeleteShader (fragment);
+  glDeleteShader (vertex_shader);
+  glDeleteShader (fragment_shader);
 
-    return 0;
-  }
-
-  result = glCreateProgram ();
-
-  glAttachShader (result, vertex);
-  glAttachShader (result, fragment);
-
-  glLinkProgram (result);
-
-  glGetProgramiv (result, GL_LINK_STATUS, &status);
-
-  if (!status) {
-    glGetProgramInfoLog (result, sizeof(log), NULL, log);
-
-    fprintf (stderr,
-             "display: shader linking failed:\n%s\n",
-             log);
-
-    glDeleteProgram (result);
-    result = 0;
-  }
-
-  glDeleteShader (vertex);
-  glDeleteShader (fragment);
-
-  return result;
+  return program;
 }
 
 /**
@@ -329,6 +316,12 @@ static void display_gl_init (void)
   if (!program)
     exit (1);
 
+  constant_color = glGetUniformLocation (program, "constant_color");
+  use_constant_color = glGetUniformLocation (program, "use_constant_color");
+  
+  constant_normal = glGetUniformLocation (program, "constant_normal");
+  use_constant_normal = glGetUniformLocation (program, "use_constant_normal");
+ 
   glGenVertexArrays (1, &vao);
 
   glGenBuffers (1, &position_vbo);
@@ -340,18 +333,15 @@ static void display_gl_init (void)
 
   glBindBuffer (GL_ARRAY_BUFFER, position_vbo);
   glEnableVertexAttribArray (0);
-  glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE,
-                         3*sizeof(float), NULL);
+  glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), NULL);
 
   glBindBuffer (GL_ARRAY_BUFFER, normal_vbo);
   glEnableVertexAttribArray (1);
-  glVertexAttribPointer (1, 3, GL_FLOAT, GL_FALSE,
-                         3*sizeof(float), NULL);
+  glVertexAttribPointer (1, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), NULL);
 
   glBindBuffer (GL_ARRAY_BUFFER, color_vbo);
   glEnableVertexAttribArray (2);
-  glVertexAttribPointer (2, 3, GL_FLOAT, GL_FALSE,
-                         3*sizeof(float), NULL);
+  glVertexAttribPointer (2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), NULL);
 
   glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, index_vbo);
 
@@ -364,8 +354,8 @@ static void display_gl_init (void)
   Camera.zoom = 1.f;
   Camera.pan_x = Camera.pan_y = 0.f;
   Camera.panning = false;
+  Camera.zooming = false;
 }
-
 
 /**
 Upload a newly received frame */
@@ -375,30 +365,38 @@ static void display_upload (DisplayFrame *frame)
   glBindVertexArray (vao);
 
   glBindBuffer (GL_ARRAY_BUFFER, position_vbo);
-  glBufferData (GL_ARRAY_BUFFER,
-                3*frame->nvertex*sizeof(float),
-                frame->position,
-                GL_DYNAMIC_DRAW);
+  glBufferData (GL_ARRAY_BUFFER, frame->position_len,
+                frame->position, GL_DYNAMIC_DRAW);
 
   glBindBuffer (GL_ARRAY_BUFFER, normal_vbo);
-  glBufferData (GL_ARRAY_BUFFER,
-                3*frame->nvertex*sizeof(float),
-                frame->normal,
-                GL_DYNAMIC_DRAW);
+  glBufferData (GL_ARRAY_BUFFER, frame->normal_len,
+                frame->normal, GL_DYNAMIC_DRAW);
 
-  glBindBuffer (GL_ARRAY_BUFFER, color_vbo);
-  glBufferData (GL_ARRAY_BUFFER,
-                3*frame->nvertex*sizeof(float),
-                frame->color,
-                GL_DYNAMIC_DRAW);
+  constant_normal_enabled = frame->normal_len == 3*sizeof(float);
+
+  if (constant_normal_enabled)
+    memcpy (constant_normal_value, frame->normal, 3*sizeof(float));
+  else {
+    glBindBuffer (GL_ARRAY_BUFFER, normal_vbo);
+    glBufferData (GL_ARRAY_BUFFER, frame->normal_len,
+                  frame->normal, GL_DYNAMIC_DRAW);
+  }
+ 
+  constant_color_enabled = frame->color_len == 3*sizeof(float);
+
+  if (constant_color_enabled)
+    memcpy (constant_color_value, frame->color, 3*sizeof(float));
+  else {
+    glBindBuffer (GL_ARRAY_BUFFER, color_vbo);
+    glBufferData (GL_ARRAY_BUFFER, frame->color_len,
+                  frame->color, GL_DYNAMIC_DRAW);
+  }
 
   glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, index_vbo);
-  glBufferData (GL_ELEMENT_ARRAY_BUFFER,
-                frame->nindex*sizeof(unsigned int),
-                frame->index,
-                GL_DYNAMIC_DRAW);
+  glBufferData (GL_ELEMENT_ARRAY_BUFFER, frame->index_len,
+                frame->index, GL_DYNAMIC_DRAW);
 
-  index_count = frame->nindex;
+  index_count = frame->index_len/sizeof(unsigned int);
   primitive = frame->primitive;
 
   glBindVertexArray (0);
@@ -440,7 +438,17 @@ static void display_render (GLFWwindow *window)
                       1, GL_FALSE, Camera.modelview);
   glUniformMatrix4fv (glGetUniformLocation (program, "projection"),
                       1, GL_FALSE, Camera.projection);
+  
+  glUniform1i (use_constant_normal, constant_normal_enabled);
 
+  if (constant_normal_enabled)
+    glUniform3fv (constant_normal, 1, constant_normal_value);
+  
+  glUniform1i (use_constant_color, constant_color_enabled);
+  
+  if (constant_color_enabled)
+    glUniform3fv (constant_color, 1, constant_color_value);
+  
   glBindVertexArray (vao);
 
   if (index_count) {

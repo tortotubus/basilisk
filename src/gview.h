@@ -6,14 +6,12 @@
 static DisplayFrame * basilisk_display_frame (void)
 {
   DisplayFrame *frame;
-
   Array *position = VertexBuffer.position;
   Array *normal = VertexBuffer.normal;
   Array *color = VertexBuffer.color;
   Array *index = VertexBuffer.index;
 
   frame = malloc (sizeof(DisplayFrame));
-
   if (!frame)
     return NULL;
 
@@ -22,18 +20,12 @@ static DisplayFrame * basilisk_display_frame (void)
   frame->color = color->p;
   frame->index = index->p;
 
-  frame->nvertex = VertexBuffer.nvertex;
-  frame->nindex =
-    index->len/sizeof(unsigned int);
+  frame->position_len = position->len;
+  frame->normal_len = normal->len;
+  frame->color_len = color->len;
+  frame->index_len = index->len;
+  frame->primitive = (VertexBuffer.type != 0);
 
-  frame->primitive = (VertexBuffer.type != 0); // 0: lines, 1: triangles
-
-  /**
-  Transfer ownership of the allocated buffers.
-  
-  array_free() must not free the buffers, so detach
-  the pointers first. */
-  
   position->p = NULL;
   normal->p = NULL;
   color->p = NULL;
