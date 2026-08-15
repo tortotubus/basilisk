@@ -1,5 +1,6 @@
 #include "display.h"
 
+#include "../grid/gpu/glad.h"
 #include <GLFW/glfw3.h>
 
 #include <pthread.h>
@@ -7,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 
 typedef struct {
   pthread_t thread;
@@ -18,13 +18,10 @@ typedef struct {
   bool stop;
 } DisplayState;
 
-
 static DisplayState Display;
 
-
-/*
- * OpenGL state belongs exclusively to the display thread.
- */
+/**
+OpenGL state belongs exclusively to the display thread. */
 
 static GLuint vao;
 static GLuint position_vbo;
@@ -36,23 +33,18 @@ static GLuint program;
 static size_t index_count;
 static int primitive;
 
+/**
+# Camera
 
-/*
- * Camera.
- *
- * This is deliberately independent of Basilisk.
- * We will replace/extend this with the jsview-style
- * interaction later.
- */
+This is deliberately independent of Basilisk. We will replace/extend
+this with the jsview-style interaction later. */
 
 typedef struct {
   float modelview[16];
   float projection[16];
 } DisplayCamera;
 
-
 static DisplayCamera Camera;
-
 
 static void matrix_identity (float *m)
 {
@@ -63,7 +55,6 @@ static void matrix_identity (float *m)
   m[10] = 1.f;
   m[15] = 1.f;
 }
-
 
 static void matrix_ortho (float *m,
                           float left, float right,
@@ -81,31 +72,25 @@ static void matrix_ortho (float *m,
   m[14] = -(far + near)/(far - near);
 }
 
-
-/*
- * DisplayFrame ownership.
- */
+/**
+# DisplayFrame ownership. */
 
 static void display_frame_free (DisplayFrame *frame)
 {
   if (!frame)
     return;
-
   free (frame->position);
   free (frame->normal);
   free (frame->color);
   free (frame->index);
-
   free (frame);
 }
 
+/**
+The simulation thread publishes a pointer.
 
-/*
- * The simulation thread publishes a pointer.
- *
- * No geometry is copied here. The display module takes
- * ownership of the complete DisplayFrame.
- */
+No geometry is copied here. The display module takes
+ownership of the complete DisplayFrame. */
 
 void display_publish (DisplayFrame *frame)
 {
@@ -118,16 +103,14 @@ void display_publish (DisplayFrame *frame)
 
   pthread_mutex_unlock (&Display.mutex);
 
-  /*
-   * Only the newest frame is retained.
-   */
+  /**
+  Only the newest frame is retained. */
+  
   display_frame_free (old);
 }
 
-
-/*
- * The display thread takes ownership of the newest frame.
- */
+/**
+The display thread takes ownership of the newest frame. */
 
 static DisplayFrame *display_take_frame (void)
 {
@@ -143,10 +126,8 @@ static DisplayFrame *display_take_frame (void)
   return frame;
 }
 
-
-/*
- * Shader compilation.
- */
+/**
+# Shader compilation */
 
 static GLuint compile_shader (GLenum type, const char *source)
 {
@@ -155,24 +136,18 @@ static GLuint compile_shader (GLenum type, const char *source)
   char log[4096];
 
   shader = glCreateShader (type);
-
   glShaderSource (shader, 1, &source, NULL);
   glCompileShader (shader);
-
   glGetShaderiv (shader, GL_COMPILE_STATUS, &status);
-
   if (!status) {
     glGetShaderInfoLog (shader, sizeof(log), NULL, log);
-
     fprintf (stderr,
              "display: shader compilation failed:\n%s\n",
              log);
-
     glDeleteShader (shader);
-
     return 0;
   }
-
+  
   return shader;
 }
 
@@ -252,10 +227,8 @@ static GLuint create_program (void)
   return result;
 }
 
-
-/*
- * OpenGL initialization.
- */
+/**
+# OpenGL initialization */
 
 static void display_gl_init (void)
 {
@@ -299,9 +272,8 @@ static void display_gl_init (void)
 }
 
 
-/*
- * Upload a newly received frame.
- */
+/**
+Upload a newly received frame */
 
 static void display_upload (DisplayFrame *frame)
 {
@@ -338,9 +310,8 @@ static void display_upload (DisplayFrame *frame)
 }
 
 
-/*
- * Render the current VBO.
- */
+/**
+Render the current VBO */
 
 static void display_render (GLFWwindow *window)
 {
@@ -353,10 +324,10 @@ static void display_render (GLFWwindow *window)
 
   glViewport (0, 0, width, height);
 
-  /*
-   * Temporary projection. The proper camera will replace
-   * this once we add rotation/panning/zooming.
-   */
+  /**
+  Temporary projection. The proper camera will replace
+  this once we add rotation/panning/zooming. */
+  
   matrix_ortho (Camera.projection,
                 -1.f, 1.f,
                 -1.f, 1.f,
@@ -380,7 +351,7 @@ static void display_render (GLFWwindow *window)
   glBindVertexArray (vao);
 
   if (index_count) {
-    GLenum mode = primitive == DISPLAY_LINES ?
+    GLenum mode = primitive == 0 ?
       GL_LINES : GL_TRIANGLES;
 
     glDrawElements (mode,
@@ -393,9 +364,8 @@ static void display_render (GLFWwindow *window)
 }
 
 
-/*
- * GLFW/OpenGL thread.
- */
+/**
+# GLFW/OpenGL thread */
 
 static void *display_thread (void *arg)
 {
@@ -413,19 +383,23 @@ static void *display_thread (void *arg)
                              NULL, NULL);
 
   if (!window) {
-    fprintf (stderr,
-             "display: glfwCreateWindow() failed\n");
-
+    fprintf (stderr, "display: glfwCreateWindow() failed\n");
     glfwTerminate();
-
     return NULL;
   }
 
   glfwMakeContextCurrent (window);
 
-  /*
-   * The display thread runs independently of the simulation.
-   */
+  if (!gladLoadGLLoader ((GLADloadproc) glfwGetProcAddress)) {
+    fprintf (stderr, "display: failed to initialize GLAD\n");
+    glfwDestroyWindow (window);
+    glfwTerminate ();
+    return NULL;
+  }
+  
+  /**
+  The display thread runs independently of the simulation.*/
+  
   glfwSwapInterval (1);
 
   display_gl_init ();

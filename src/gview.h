@@ -1,9 +1,7 @@
-#ifndef BASILISK_DISPLAY_H
-#define BASILISK_DISPLAY_H
-
+#include "view.h"
 #include "vertexbuffer.h"
-#include "display.h"
-
+#include "gview/display.h"
+#pragma autolink -L$BASILISK/gview -lgview -lglfw
 
 static DisplayFrame * basilisk_display_frame (void)
 {
@@ -28,16 +26,14 @@ static DisplayFrame * basilisk_display_frame (void)
   frame->nindex =
     index->len/sizeof(unsigned int);
 
-  frame->primitive =
-    VertexBuffer.type == 0 ?
-    DISPLAY_LINES : DISPLAY_TRIANGLES;
+  frame->primitive = (VertexBuffer.type != 0); // 0: lines, 1: triangles
 
-  /*
-   * Transfer ownership of the allocated buffers.
-   *
-   * array_free() must not free the buffers, so detach
-   * the pointers first.
-   */
+  /**
+  Transfer ownership of the allocated buffers.
+  
+  array_free() must not free the buffers, so detach
+  the pointers first. */
+  
   position->p = NULL;
   normal->p = NULL;
   color->p = NULL;
@@ -56,44 +52,32 @@ static DisplayFrame * basilisk_display_frame (void)
   return frame;
 }
 
-
 static void basilisk_display_publish (void)
 {
-  DisplayFrame *frame = basilisk_display_frame ();
-
+  DisplayFrame *frame = basilisk_display_frame();
   if (frame)
     display_publish (frame);
 }
 
+/**
+The Basilisk macro wraps the drawing commands.
 
-/*
- * The Basilisk macro wraps the drawing commands.
- *
- * The contents of the macro body are the commands which
- * generate the vertex buffer.
- */
+The contents of the macro body are the commands which
+generate the vertex buffer. */
 
-macro display_thread ()
+macro gview()
 {
   vertex_buffer_setup();
-
-  {
-    ...
-  }
-
+  {...}
   basilisk_display_publish();
 }
-
 
 event display_init (i = 0)
 {
   display_start();
 }
 
-
 event display_cleanup (t = end)
 {
   display_stop();
 }
-
-#endif
