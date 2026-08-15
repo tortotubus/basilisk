@@ -23,6 +23,7 @@ static DisplayState Display;
 
 const float mouse_zoom_sensitivity = 10.f; // smaller is more sensitive
 static bool lighting_enabled = true; // should be false in 2D
+static bool rotation_enabled = true; // should be false in 2D
 
 /**
 OpenGL state belongs exclusively to the display thread. */
@@ -58,12 +59,15 @@ This is deliberately independent of Basilisk. We will replace/extend
 this with the jsview-style interaction later. */
 
 typedef struct {
+  float rotation[4];
   float modelview[16];
   float projection[16];
   float zoom;
   float pan_x, pan_y;
   double mouse_x, mouse_y;
-  bool panning, zooming;
+  bool rotating;
+  bool panning;
+  bool zooming;
 } DisplayCamera;
 
 static DisplayCamera Camera;
@@ -92,6 +96,94 @@ static void matrix_ortho (float *m,
   m[12] = -(right + left)/(right - left);
   m[13] = -(top + bottom)/(top - bottom);
   m[14] = -(far + near)/(far - near);
+}
+
+static void display_arcball (GLFWwindow *window, double x, double y, float p[3])
+{
+  int width, height;
+  float aspect, nx, ny, r;
+
+  glfwGetWindowSize (window, &width, &height);
+
+  aspect = (float) width/height;
+  nx = (2.f*(float) x/width - 1.f)*aspect;
+  ny = 1.f - 2.f*(float) y/height;
+
+  r = nx*nx + ny*ny;
+
+  if (r <= 1.f)
+    p[2] = sqrtf (1.f - r);
+  else {
+    float scale = 1.f/sqrtf (r);
+    nx *= scale;
+    ny *= scale;
+    p[2] = 0.f;
+  }
+
+  p[0] = nx;
+  p[1] = ny;
+
+  float length = sqrtf (p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+
+  p[0] /= length;
+  p[1] /= length;
+  p[2] /= length;
+}
+
+static void display_arcball_rotate (float q[4], const float a[3], const float b[3])
+{
+  float cross[3] = {
+    a[1]*b[2] - a[2]*b[1],
+    a[2]*b[0] - a[0]*b[2],
+    a[0]*b[1] - a[1]*b[0]
+  };
+  float dot = a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+
+  q[0] = 1.f + dot;
+  q[1] = cross[0];
+  q[2] = cross[1];
+  q[3] = cross[2];
+
+  float length = sqrtf (q[0]*q[0] + q[1]*q[1] +
+                        q[2]*q[2] + q[3]*q[3]);
+
+  if (length > 0.f) {
+    q[0] /= length;
+    q[1] /= length;
+    q[2] /= length;
+    q[3] /= length;
+  }
+}
+
+static void display_quaternion_multiply (float r[4], const float a[4], const float b[4])
+{
+  float q[4];
+
+  q[0] = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3];
+  q[1] = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2];
+  q[2] = a[0]*b[2] - a[1]*b[3] + a[2]*b[0] + a[3]*b[1];
+  q[3] = a[0]*b[3] + a[1]*b[2] - a[2]*b[1] + a[3]*b[0];
+
+  memcpy (r, q, sizeof(q));
+}
+
+static void display_quaternion_matrix (float m[16], const float q[4])
+{
+  float w = q[0], x = q[1], y = q[2], z = q[3];
+
+  matrix_identity (m);
+
+  m[0] = 1.f - 2.f*(y*y + z*z);
+  m[1] = 2.f*(x*y + z*w);
+  m[2] = 2.f*(x*z - y*w);
+
+  m[4] = 2.f*(x*y - z*w);
+  m[5] = 1.f - 2.f*(x*x + z*z);
+  m[6] = 2.f*(y*z + x*w);
+
+  m[8] = 2.f*(x*z + y*w);
+  m[9] = 2.f*(y*z - x*w);
+  m[10] = 1.f - 2.f*(x*x + y*y);
 }
 
 static void display_zoom (GLFWwindow *window, double factor)
@@ -137,7 +229,13 @@ static void display_mouse_button (GLFWwindow *window, int button, int action, in
 {
   (void) mods;
 
-  if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+  if (rotation_enabled &&
+      button == GLFW_MOUSE_BUTTON_LEFT) {
+    Camera.rotating = action == GLFW_PRESS;
+    if (Camera.rotating)
+      glfwGetCursorPos (window, &Camera.mouse_x, &Camera.mouse_y);
+  }
+  else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
     Camera.panning = action == GLFW_PRESS;
     if (Camera.panning)
       glfwGetCursorPos (window, &Camera.mouse_x, &Camera.mouse_y);
@@ -153,8 +251,21 @@ static void display_cursor_pos (GLFWwindow *window, double x, double y)
 {
   int width, height;
   double dx, dy;
+  
+  if (Camera.rotating) {
+    float a[3], b[3], q[4], rotation[4];
 
-  if (Camera.panning) {
+    display_arcball (window, Camera.mouse_x, Camera.mouse_y, a);
+    display_arcball (window, x, y, b);
+    display_arcball_rotate (q, a, b);
+
+    display_quaternion_multiply (rotation, q, Camera.rotation);
+    memcpy (Camera.rotation, rotation, sizeof(rotation));
+
+    Camera.mouse_x = x;
+    Camera.mouse_y = y;
+  }
+  else if (Camera.panning) {
     glfwGetWindowSize (window, &width, &height);
 
     if (width && height) {
@@ -327,6 +438,17 @@ static void display_gl_init (void)
   if (!program)
     exit (1);
 
+  Camera.rotation[0] = 1.f;
+  Camera.rotation[1] = 0.f;
+  Camera.rotation[2] = 0.f;
+  Camera.rotation[3] = 0.f;
+  Camera.zoom = 1.f;
+  Camera.pan_x = Camera.pan_y = 0.f;
+  Camera.rotating = Camera.panning = Camera.zooming = false;
+
+  matrix_identity (Camera.modelview);
+  matrix_identity (Camera.projection);
+  
   constant_color = glGetUniformLocation (program, "constant_color");
   use_constant_color = glGetUniformLocation (program, "use_constant_color");
   
@@ -363,7 +485,6 @@ static void display_gl_init (void)
 
   glEnable (GL_DEPTH_TEST);
 
-  matrix_identity (Camera.modelview);
   matrix_identity (Camera.projection);
   Camera.zoom = 1.f;
   Camera.pan_x = Camera.pan_y = 0.f;
@@ -439,7 +560,7 @@ static void display_render (GLFWwindow *window)
   matrix_ortho (Camera.projection,
                 -sx, sx, -sy, sy, -100.f, 100.f);
 
-  matrix_identity (Camera.modelview);
+  display_quaternion_matrix (Camera.modelview, Camera.rotation);
   Camera.modelview[12] = Camera.pan_x;
   Camera.modelview[13] = Camera.pan_y;
 
