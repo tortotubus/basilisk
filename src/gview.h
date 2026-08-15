@@ -66,6 +66,7 @@ macro gview()
 
 event display_init (i = 0)
 {
+  Gview.rotation = Gview.lighting = dimension > 2;
   display_start();
 }
 

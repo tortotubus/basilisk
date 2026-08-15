@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdbool.h>
 
 typedef struct {
   float *position;
@@ -15,3 +16,10 @@ typedef struct {
 int  display_start (void);
 void display_publish (DisplayFrame *frame);
 void display_stop (void);
+
+typedef struct {
+  bool lighting;
+  bool rotation;  
+} GviewParameters;
+
+extern GviewParameters Gview;

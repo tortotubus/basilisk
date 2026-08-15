@@ -10,6 +10,8 @@
 #include <string.h>
 #include <math.h>
 
+GviewParameters Gview = {0};
+
 typedef struct {
   pthread_t thread;
   pthread_mutex_t mutex;
@@ -22,8 +24,6 @@ typedef struct {
 static DisplayState Display;
 
 const float mouse_zoom_sensitivity = 10.f; // smaller is more sensitive
-static bool lighting_enabled = true; // should be false in 2D
-static bool rotation_enabled = true; // should be false in 2D
 
 /**
 OpenGL state belongs exclusively to the display thread. */
@@ -229,7 +229,7 @@ static void display_mouse_button (GLFWwindow *window, int button, int action, in
 {
   (void) mods;
 
-  if (rotation_enabled &&
+  if (Gview.rotation &&
       button == GLFW_MOUSE_BUTTON_LEFT) {
     Camera.rotating = action == GLFW_PRESS;
     if (Camera.rotating)
@@ -384,6 +384,7 @@ static GLuint create_program (void)
     "uniform bool use_constant_normal;\n"
     "uniform vec3 constant_color;\n"
     "uniform bool use_constant_color;\n"
+    "uniform bool lighting;\n"
     "\n"
     "out vec3 vertex_normal;\n"
     "out vec3 vertex_color;\n"
@@ -391,8 +392,8 @@ static GLuint create_program (void)
     "void main ()\n"
     "{\n"
     "  gl_Position = projection * modelview * vec4 (position, 1.);\n"
-    "  vertex_normal = mat3 (modelview)*"
-    "(use_constant_normal ? constant_normal : normal);\n"
+    "  if (lighting)\n"
+    "    vertex_normal = mat3 (modelview)*(use_constant_normal ? constant_normal : normal);\n"
     "  vertex_color = use_constant_color ? constant_color : color;\n"
     "}\n";
 
@@ -409,9 +410,14 @@ static GLuint create_program (void)
     "\n"
     "void main ()\n"
     "{\n"
-    "  float diffuse = max (dot (normalize (vertex_normal),\n"
-    "                            -normalize (light_direction)), 0.);\n"
-    "  float intensity = lighting ? 0.25 + 0.75*diffuse : 1.;\n"
+    "  float intensity = 1.;\n"
+    "  if (lighting) {\n"
+    "    vec3 n = normalize (vertex_normal);\n"
+    "    if (!gl_FrontFacing)\n"
+    "      n = -n;\n"
+    "    float diffuse = max (dot (n, normalize (light_direction)), 0.);\n"
+    "    intensity = 0.25 + 0.75*diffuse;\n"
+    "  }\n"
     "  frag_color = vec4 (intensity*vertex_color, 1.);\n"
     "}\n";
 
@@ -598,7 +604,7 @@ static void display_render (GLFWwindow *window)
   glUniformMatrix4fv (glGetUniformLocation (program, "projection"),
                       1, GL_FALSE, Camera.projection);
   
-  glUniform1i (lighting, lighting_enabled);
+  glUniform1i (lighting, Gview.lighting);
   glUniform3f (light_direction, 0.3f, 0.5f, 1.f);
  
   glUniform1i (use_constant_normal, constant_normal_enabled);
