@@ -391,7 +391,8 @@ static GLuint create_program (void)
     "void main ()\n"
     "{\n"
     "  gl_Position = projection * modelview * vec4 (position, 1.);\n"
-    "  vertex_normal = use_constant_normal ? constant_normal : normal;\n"
+    "  vertex_normal = mat3 (modelview)*"
+    "(use_constant_normal ? constant_normal : normal);\n"
     "  vertex_color = use_constant_color ? constant_color : color;\n"
     "}\n";
 
@@ -409,23 +410,46 @@ static GLuint create_program (void)
     "void main ()\n"
     "{\n"
     "  float diffuse = max (dot (normalize (vertex_normal),\n"
-    "                            normalize (light_direction)), 0.);\n"
+    "                            -normalize (light_direction)), 0.);\n"
     "  float intensity = lighting ? 0.25 + 0.75*diffuse : 1.;\n"
     "  frag_color = vec4 (intensity*vertex_color, 1.);\n"
     "}\n";
 
-  GLuint vertex_shader = compile_shader (GL_VERTEX_SHADER, vertex_source);
-  GLuint fragment_shader = compile_shader (GL_FRAGMENT_SHADER, fragment_source);
-  GLuint program = glCreateProgram ();
+  GLuint vertex;
+  GLuint fragment;
+  GLuint result;
+  GLint status;
+  char log[4096];
 
-  glAttachShader (program, vertex_shader);
-  glAttachShader (program, fragment_shader);
-  glLinkProgram (program);
+  vertex = compile_shader (GL_VERTEX_SHADER, vertex_source);
+  fragment = compile_shader (GL_FRAGMENT_SHADER, fragment_source);
 
-  glDeleteShader (vertex_shader);
-  glDeleteShader (fragment_shader);
+  if (!vertex || !fragment) {
+    if (vertex)
+      glDeleteShader (vertex);
+    if (fragment)
+      glDeleteShader (fragment);
+    return 0;
+  }
 
-  return program;
+  result = glCreateProgram ();
+
+  glAttachShader (result, vertex);
+  glAttachShader (result, fragment);
+  glLinkProgram (result);
+
+  glGetProgramiv (result, GL_LINK_STATUS, &status);
+  if (!status) {
+    glGetProgramInfoLog (result, sizeof(log), NULL, log);
+    fprintf (stderr, "display: shader linking failed:\n%s\n", log);
+    glDeleteProgram (result);
+    result = 0;
+  }
+
+  glDeleteShader (vertex);
+  glDeleteShader (fragment);
+
+  return result;
 }
 
 /**
@@ -575,7 +599,7 @@ static void display_render (GLFWwindow *window)
                       1, GL_FALSE, Camera.projection);
   
   glUniform1i (lighting, lighting_enabled);
-  glUniform3f (light_direction, -0.3f, -0.5f, -1.f);
+  glUniform3f (light_direction, 0.3f, 0.5f, 1.f);
  
   glUniform1i (use_constant_normal, constant_normal_enabled);
 
