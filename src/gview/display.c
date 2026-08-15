@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 typedef struct {
   pthread_t thread;
@@ -19,6 +20,8 @@ typedef struct {
 } DisplayState;
 
 static DisplayState Display;
+
+const float mouse_zoom_sensitivity = 10.f; // smaller is more sensitive
 
 /**
 OpenGL state belongs exclusively to the display thread. */
@@ -42,6 +45,10 @@ this with the jsview-style interaction later. */
 typedef struct {
   float modelview[16];
   float projection[16];
+  float zoom;
+  float pan_x, pan_y;
+  double mouse_x, mouse_y;
+  bool panning, zooming;
 } DisplayCamera;
 
 static DisplayCamera Camera;
@@ -70,6 +77,91 @@ static void matrix_ortho (float *m,
   m[12] = -(right + left)/(right - left);
   m[13] = -(top + bottom)/(top - bottom);
   m[14] = -(far + near)/(far - near);
+}
+
+static void display_zoom (GLFWwindow *window, double factor)
+{
+  int width, height;
+  double x, y;
+  float aspect, old_zoom, new_zoom;
+  float nx, ny;
+
+  glfwGetCursorPos (window, &x, &y);
+  glfwGetWindowSize (window, &width, &height);
+
+  if (!width || !height)
+    return;
+
+  old_zoom = Camera.zoom;
+  new_zoom = old_zoom*factor;
+
+  if (new_zoom < 0.001f)
+    new_zoom = 0.001f;
+  else if (new_zoom > 100.f)
+    new_zoom = 100.f;
+
+  if (new_zoom == old_zoom)
+    return;
+
+  aspect = (float) width/height;
+  nx = 2.f*(float) x/width - 1.f;
+  ny = 1.f - 2.f*(float) y/height;
+
+  Camera.pan_x += nx*aspect*(new_zoom - old_zoom);
+  Camera.pan_y += ny*(new_zoom - old_zoom);
+  Camera.zoom = new_zoom;
+}
+
+static void display_scroll (GLFWwindow *window, double xoffset, double yoffset)
+{
+  (void) xoffset;
+  display_zoom (window, powf (1.1f, (float) -yoffset));
+}
+
+static void display_mouse_button (GLFWwindow *window, int button, int action, int mods)
+{
+  (void) mods;
+
+  if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+    Camera.panning = action == GLFW_PRESS;
+    if (Camera.panning)
+      glfwGetCursorPos (window, &Camera.mouse_x, &Camera.mouse_y);
+  }
+  else if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+    Camera.zooming = action == GLFW_PRESS;
+    if (Camera.zooming)
+      glfwGetCursorPos (window, &Camera.mouse_x, &Camera.mouse_y);
+  }
+}
+
+static void display_cursor_pos (GLFWwindow *window, double x, double y)
+{
+  int width, height;
+  double dx, dy;
+
+  if (Camera.panning) {
+    glfwGetWindowSize (window, &width, &height);
+
+    if (width && height) {
+      dx = x - Camera.mouse_x;
+      dy = y - Camera.mouse_y;
+
+      Camera.pan_x += 2.f*Camera.zoom*(float) dx/width;
+      Camera.pan_y -= 2.f*Camera.zoom*(float) dy/height;
+
+      Camera.mouse_x = x;
+      Camera.mouse_y = y;
+    }
+  }
+  else if (Camera.zooming) {
+    dy = y - Camera.mouse_y;
+
+    if (dy) {
+      display_zoom (window, powf (1.1f, (float) dy/mouse_zoom_sensitivity));
+    }
+
+    Camera.mouse_y = y;
+  }
 }
 
 /**
@@ -269,6 +361,9 @@ static void display_gl_init (void)
 
   matrix_identity (Camera.modelview);
   matrix_identity (Camera.projection);
+  Camera.zoom = 1.f;
+  Camera.pan_x = Camera.pan_y = 0.f;
+  Camera.panning = false;
 }
 
 
@@ -316,6 +411,7 @@ Render the current VBO */
 static void display_render (GLFWwindow *window)
 {
   int width, height;
+  float aspect, sx, sy;
 
   glfwGetFramebufferSize (window, &width, &height);
 
@@ -324,45 +420,38 @@ static void display_render (GLFWwindow *window)
 
   glViewport (0, 0, width, height);
 
-  /**
-  Temporary projection. The proper camera will replace
-  this once we add rotation/panning/zooming. */
-  
+  aspect = (float) width/height;
+  sx = Camera.zoom*aspect;
+  sy = Camera.zoom;
+
   matrix_ortho (Camera.projection,
-                -1.f, 1.f,
-                -1.f, 1.f,
-                -100.f, 100.f);
+                -sx, sx, -sy, sy, -100.f, 100.f);
+
+  matrix_identity (Camera.modelview);
+  Camera.modelview[12] = Camera.pan_x;
+  Camera.modelview[13] = Camera.pan_y;
 
   glClearColor (0.15f, 0.15f, 0.15f, 1.f);
-
-  glClear (GL_COLOR_BUFFER_BIT |
-           GL_DEPTH_BUFFER_BIT);
+  glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
   glUseProgram (program);
 
-  glUniformMatrix4fv (
-    glGetUniformLocation (program, "modelview"),
-    1, GL_FALSE, Camera.modelview);
-
-  glUniformMatrix4fv (
-    glGetUniformLocation (program, "projection"),
-    1, GL_FALSE, Camera.projection);
+  glUniformMatrix4fv (glGetUniformLocation (program, "modelview"),
+                      1, GL_FALSE, Camera.modelview);
+  glUniformMatrix4fv (glGetUniformLocation (program, "projection"),
+                      1, GL_FALSE, Camera.projection);
 
   glBindVertexArray (vao);
 
   if (index_count) {
-    GLenum mode = primitive == 0 ?
-      GL_LINES : GL_TRIANGLES;
+    GLenum mode = primitive == 0 ? GL_LINES : GL_TRIANGLES;
 
-    glDrawElements (mode,
-                    (GLsizei) index_count,
-                    GL_UNSIGNED_INT,
-                    NULL);
+    glDrawElements (mode, (GLsizei) index_count,
+                    GL_UNSIGNED_INT, NULL);
   }
 
   glBindVertexArray (0);
 }
-
 
 /**
 # GLFW/OpenGL thread */
@@ -397,6 +486,10 @@ static void *display_thread (void *arg)
     return NULL;
   }
   
+  glfwSetScrollCallback (window, display_scroll);
+  glfwSetMouseButtonCallback (window, display_mouse_button);
+  glfwSetCursorPosCallback (window, display_cursor_pos);
+ 
   /**
   The display thread runs independently of the simulation.*/
   
