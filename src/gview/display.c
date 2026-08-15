@@ -22,6 +22,7 @@ typedef struct {
 static DisplayState Display;
 
 const float mouse_zoom_sensitivity = 10.f; // smaller is more sensitive
+static bool lighting_enabled = true; // should be false in 2D
 
 /**
 OpenGL state belongs exclusively to the display thread. */
@@ -41,6 +42,9 @@ static GLint constant_normal;
 static GLint use_constant_normal;
 static bool constant_normal_enabled;
 static float constant_normal_value[3];
+
+static GLint lighting;
+static GLint light_direction;
 
 static GLuint program;
 
@@ -285,11 +289,18 @@ static GLuint create_program (void)
     "\n"
     "in vec3 vertex_normal;\n"
     "in vec3 vertex_color;\n"
+    "\n"
+    "uniform bool lighting;\n"
+    "uniform vec3 light_direction;\n"
+    "\n"
     "out vec4 frag_color;\n"
     "\n"
     "void main ()\n"
     "{\n"
-    "  frag_color = vec4 (vertex_color, 1.);\n"
+    "  float diffuse = max (dot (normalize (vertex_normal),\n"
+    "                            normalize (light_direction)), 0.);\n"
+    "  float intensity = lighting ? 0.25 + 0.75*diffuse : 1.;\n"
+    "  frag_color = vec4 (intensity*vertex_color, 1.);\n"
     "}\n";
 
   GLuint vertex_shader = compile_shader (GL_VERTEX_SHADER, vertex_source);
@@ -321,7 +332,10 @@ static void display_gl_init (void)
   
   constant_normal = glGetUniformLocation (program, "constant_normal");
   use_constant_normal = glGetUniformLocation (program, "use_constant_normal");
- 
+
+  lighting = glGetUniformLocation (program, "lighting");
+  light_direction = glGetUniformLocation (program, "light_direction");
+  
   glGenVertexArrays (1, &vao);
 
   glGenBuffers (1, &position_vbo);
@@ -439,6 +453,9 @@ static void display_render (GLFWwindow *window)
   glUniformMatrix4fv (glGetUniformLocation (program, "projection"),
                       1, GL_FALSE, Camera.projection);
   
+  glUniform1i (lighting, lighting_enabled);
+  glUniform3f (light_direction, -0.3f, -0.5f, -1.f);
+ 
   glUniform1i (use_constant_normal, constant_normal_enabled);
 
   if (constant_normal_enabled)
