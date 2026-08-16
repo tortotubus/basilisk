@@ -16,10 +16,12 @@ typedef struct {
 int  display_start (void);
 void display_publish (DisplayFrame *frame);
 void display_stop (void);
+void display_wait (void);
 
 typedef struct {
   bool lighting;
-  bool rotation;  
+  bool rotation;
+  bool wait;
 } GviewParameters;
 
 extern GviewParameters Gview;

@@ -19,6 +19,7 @@ typedef struct {
   DisplayFrame *ready;
 
   bool stop;
+  bool joined;
 } DisplayState;
 
 static DisplayState Display;
@@ -714,19 +715,23 @@ static void *display_thread (void *arg)
 int display_start (void)
 {
   memset (&Display, 0, sizeof(Display));
-
   if (pthread_mutex_init (&Display.mutex, NULL))
     return -1;
-
   if (pthread_create (&Display.thread, NULL,
                       display_thread, NULL)) {
     pthread_mutex_destroy (&Display.mutex);
     return -1;
   }
-
   return 0;
 }
 
+void display_wait (void)
+{
+  if (!Display.joined) {
+    pthread_join (Display.thread, NULL);
+    Display.joined = true;
+  }
+}
 
 void display_stop (void)
 {
@@ -736,7 +741,7 @@ void display_stop (void)
 
   pthread_mutex_unlock (&Display.mutex);
 
-  pthread_join (Display.thread, NULL);
+  display_wait ();
 
   display_frame_free (Display.ready);
   Display.ready = NULL;
