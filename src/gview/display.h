@@ -5,11 +5,11 @@ typedef struct {
   float *position;
   float *normal;
   float *color;
-  unsigned int *index;
+  unsigned int *index, *lindex;
   size_t position_len;
   size_t normal_len;
   size_t color_len;
-  size_t index_len;
+  size_t index_len, lindex_len;
   int primitive;
 } DisplayFrame;
 

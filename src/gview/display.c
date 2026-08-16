@@ -43,7 +43,7 @@ static GLuint vao;
 static GLuint position_vbo;
 static GLuint normal_vbo;
 static GLuint color_vbo;
-static GLuint index_vbo;
+static GLuint index_vbo, lindex_vbo;
 
 static GLint constant_color;
 static GLint use_constant_color;
@@ -60,8 +60,7 @@ static GLint light_direction;
 
 static GLuint program;
 
-static size_t index_count;
-static int primitive;
+static size_t index_count, lindex_count;
 
 /**
 # Camera
@@ -312,6 +311,7 @@ static void display_frame_free (DisplayFrame *frame)
   free (frame->normal);
   free (frame->color);
   free (frame->index);
+  free (frame->lindex);
   free (frame);
 }
 
@@ -505,6 +505,7 @@ static void display_gl_init (void)
   glGenBuffers (1, &normal_vbo);
   glGenBuffers (1, &color_vbo);
   glGenBuffers (1, &index_vbo);
+  glGenBuffers (1, &lindex_vbo);
 
   glBindVertexArray (vao);
 
@@ -519,8 +520,6 @@ static void display_gl_init (void)
   glBindBuffer (GL_ARRAY_BUFFER, color_vbo);
   glEnableVertexAttribArray (2);
   glVertexAttribPointer (2, 3, GL_FLOAT, GL_FALSE, 3*sizeof(float), NULL);
-
-  glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, index_vbo);
 
   glBindVertexArray (0);
 
@@ -571,9 +570,12 @@ static void display_upload (DisplayFrame *frame)
   glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, index_vbo);
   glBufferData (GL_ELEMENT_ARRAY_BUFFER, frame->index_len,
                 frame->index, GL_DYNAMIC_DRAW);
-
   index_count = frame->index_len/sizeof(unsigned int);
-  primitive = frame->primitive;
+  
+  glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, lindex_vbo);
+  glBufferData (GL_ELEMENT_ARRAY_BUFFER, frame->lindex_len,
+                frame->lindex, GL_DYNAMIC_DRAW);
+  lindex_count = frame->lindex_len/sizeof(unsigned int);
 
   glBindVertexArray (0);
 }
@@ -631,9 +633,13 @@ static void display_render (GLFWwindow *window)
   glBindVertexArray (vao);
 
   if (index_count) {
-    GLenum mode = primitive == 0 ? GL_LINES : GL_TRIANGLES;
-
-    glDrawElements (mode, (GLsizei) index_count,
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, index_vbo);
+    glDrawElements (GL_TRIANGLES, (GLsizei) index_count,
+                    GL_UNSIGNED_INT, NULL);
+  }
+  if (lindex_count) {
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, lindex_vbo);
+    glDrawElements (GL_LINES, (GLsizei) lindex_count,
                     GL_UNSIGNED_INT, NULL);
   }
 
@@ -718,6 +724,7 @@ static void *display_thread (void *arg)
   glDeleteBuffers (1, &normal_vbo);
   glDeleteBuffers (1, &color_vbo);
   glDeleteBuffers (1, &index_vbo);
+  glDeleteBuffers (1, &lindex_vbo);
   glDeleteVertexArrays (1, &vao);
   glDeleteProgram (program);
 
