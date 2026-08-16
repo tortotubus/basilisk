@@ -1,3 +1,13 @@
+/**
+# Gview
+
+To install
+
+~~~bash
+sudo apt install libimgui-dev
+~~~
+*/
+
 #include "display.h"
 
 #include "../grid/gpu/glad.h"
@@ -633,6 +643,8 @@ static void display_render (GLFWwindow *window)
 /**
 # GLFW/OpenGL thread */
 
+#include "gui/ui.c"
+
 static void *display_thread (void *arg)
 {
   GLFWwindow *window;
@@ -672,12 +684,13 @@ static void *display_thread (void *arg)
   
   glfwSwapInterval (1);
 
-  display_gl_init ();
-
+  display_gl_init();
+  ui_init (window);
+  
   while (!glfwWindowShouldClose (window)) {
     DisplayFrame *frame;
 
-    glfwPollEvents ();
+    glfwPollEvents();
 
     pthread_mutex_lock (&Display.mutex);
     bool stop = Display.stop;
@@ -686,7 +699,7 @@ static void *display_thread (void *arg)
     if (stop)
       break;
 
-    frame = display_take_frame ();
+    frame = display_take_frame();
 
     if (frame) {
       display_upload (frame);
@@ -694,10 +707,13 @@ static void *display_thread (void *arg)
     }
 
     display_render (window);
-
+    ui (window);
+    
     glfwSwapBuffers (window);
   }
 
+  ui_destroy();
+  
   glDeleteBuffers (1, &position_vbo);
   glDeleteBuffers (1, &normal_vbo);
   glDeleteBuffers (1, &color_vbo);
