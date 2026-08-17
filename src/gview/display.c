@@ -28,8 +28,8 @@ typedef struct {
 
   DisplayFrame *ready;
 
-  bool stop;
-  bool joined;
+  bool redraw;
+  bool joined, stop;
 } DisplayState;
 
 static DisplayState Display;
@@ -713,11 +713,21 @@ static void *display_thread (void *arg)
     }
 
     display_render (window);
-    ui (window);
+    
+    if (ui (window)) {
+      pthread_mutex_lock (&Display.mutex);
+      Display.redraw = true;
+      pthread_mutex_unlock (&Display.mutex);
+    }
     
     glfwSwapBuffers (window);
   }
 
+  /* The window was closed by the user. */
+  pthread_mutex_lock (&Display.mutex);
+  Display.stop = true;
+  pthread_mutex_unlock (&Display.mutex);
+ 
   ui_destroy();
   
   glDeleteBuffers (1, &position_vbo);
@@ -748,23 +758,34 @@ int display_start (void)
   return 0;
 }
 
-void display_wait (void)
+DisplayStatus display_redraw (void)
 {
-  if (!Display.joined) {
-    pthread_join (Display.thread, NULL);
-    Display.joined = true;
+  DisplayStatus result;
+
+  pthread_mutex_lock (&Display.mutex);
+  if (Display.stop)
+    result = DISPLAY_STOP;
+  else if (Display.redraw) {
+    Display.redraw = false;
+    result = DISPLAY_REDRAW;
   }
+  else
+    result = DISPLAY_NO_REDRAW;
+  pthread_mutex_unlock (&Display.mutex);
+
+  return result;
 }
 
 void display_stop (void)
 {
   pthread_mutex_lock (&Display.mutex);
-
   Display.stop = true;
-
   pthread_mutex_unlock (&Display.mutex);
 
-  display_wait ();
+  if (!Display.joined) {
+    pthread_join (Display.thread, NULL);
+    Display.joined = true;
+  }
 
   display_frame_free (Display.ready);
   Display.ready = NULL;

@@ -1,6 +1,7 @@
 #include "bindings/dcimgui.h"
 #include "bindings/dcimgui_impl_glfw.h"
 #include "bindings/dcimgui_impl_opengl3.h"
+#include "ui.h"
 
 /**
 # Configuration */
@@ -42,7 +43,7 @@ struct UIDrawItem {
   const char *name;
   bool visible;
 
-  void (*properties) (UIDrawItem *);
+  bool (*properties) (UIDrawItem *);
   const char *(*summary) (UIDrawItem *);
   char *(*command) (UIDrawItem *);
 };
@@ -103,18 +104,23 @@ static void ui_delete_draw_item (int index)
   }
 }
 
-static void ui_draw_menu (void)
+static bool ui_draw_menu (void)
 {
+  bool changed = false;
   if (IgBeginMenu ("Draw")) {
-    if (IgMenuItem ("squares"))
+    if (IgMenuItem ("squares")) {
       ui_add_draw_item (ui_squares_new (next_draw_item_id++));
-
+      changed = true;
+    }
     IgEndMenu ();
   }
+  return changed;
 }
 
-static void ui_draw_list (int width, int height)
+static bool ui_draw_list (int width, int height)
 {
+  bool changed = false;
+  
   IgSetNextWindowPos ((ImVec2){width - items_width, ui_top},
                       ImGuiCond_Always);
   IgSetNextWindowSize ((ImVec2){items_width, height - ui_top},
@@ -127,8 +133,10 @@ static void ui_draw_list (int width, int height)
     if (selected_draw_id && IgIsKeyPressed (ImGuiKey_Delete)) {
       int index = ui_find_draw_item (selected_draw_id);
 
-      if (index >= 0)
+      if (index >= 0) {
         ui_delete_draw_item (index);
+        changed = true;
+      }
     }
 
     if (IgBeginTable ("draw_items", 3,
@@ -155,8 +163,9 @@ static void ui_draw_list (int width, int height)
         
         /* Visibility */
         IgTableNextColumn ();
-        IgCheckbox ("##visible", &item->visible);
-
+        if (IgCheckbox ("##visible", &item->visible))
+          changed = true;
+        
         /* Name */
         IgTableNextColumn ();
         IgPushStyleColor (ImGuiCol_HeaderHovered, IM_COL32 (0, 0, 0, 0));
@@ -186,21 +195,26 @@ static void ui_draw_list (int width, int height)
     }
   }
   IgEnd();
+
+  return changed;
 }
 
-static void ui_draw_properties (void)
+static bool ui_draw_properties (void)
 {
   int index = ui_find_draw_item (selected_draw_id);
 
   if (index < 0 || !properties_open)
-    return;
+    return false;
 
   UIDrawItem *item = draw_list.items[index];
-
+  bool changed = false;
+  
   if (IgBegin (item->name, &properties_open, 0))
-    item->properties (item);
+    changed = item->properties (item);
 
   IgEnd ();
+
+  return changed;
 }
 
 /**
@@ -211,8 +225,10 @@ The UI belongs exclusively to the display thread. */
 #include "bindings/dcimgui.h"
 #include <GLFW/glfw3.h>
 
-static void ui (GLFWwindow *window)
+static bool ui (GLFWwindow *window)
 {
+  bool changed = false;
+  
   cImGui_ImplOpenGL3_NewFrame();
   cImGui_ImplGlfw_NewFrame();
   IgNewFrame();
@@ -244,14 +260,59 @@ static void ui (GLFWwindow *window)
       IgEndMenu ();
     }
 
-    ui_draw_menu();
+    if (ui_draw_menu())
+      changed = true;
 
     IgEndMainMenuBar ();
   }
 
-  ui_draw_list (width, height);
-  ui_draw_properties ();
+  if (ui_draw_list (width, height))
+    changed = true;
+  
+  if (ui_draw_properties ())
+    changed = true;
   
   IgRender ();
   cImGui_ImplOpenGL3_RenderDrawData (IgGetDrawData ());
+
+  return changed;
+}
+
+/**
+# Returns the drawing commands */
+
+const char *ui_commands (void)
+{
+  static char *commands;
+  static size_t size;
+
+  size_t length = 0;
+
+  if (!commands) {
+    size = 1024;
+    commands = malloc (size);
+  }
+
+  commands[0] = '\0';
+  for (int i = 0; i < draw_list.nitems; i++) {
+    UIDrawItem *item = draw_list.items[i];
+    if (!item->visible)
+      continue;
+    char *command = item->command (item);
+    if (!command)
+      continue;
+    size_t n = strlen (command);
+    if (length + n + 2 > size) {
+      while (length + n + 2 > size)
+        size *= 2;
+      commands = realloc (commands, size);
+    }
+    memcpy (&commands[length], command, n);
+    length += n;
+    commands[length++] = '\n';
+    commands[length] = '\0';
+    free (command);
+  }
+
+  return commands;
 }

@@ -9,15 +9,31 @@ typedef struct {
   bool linear;
 } UISquares;
 
-static void squares_properties (UIDrawItem *ui)
+static bool squares_properties (UIDrawItem *ui)
 {
   UISquares *squares = (UISquares *) ui;
-
+  bool changed = false;
+  
   IgInputText ("color", squares->color, sizeof(squares->color), 0);
+  if (IgIsItemDeactivatedAfterEdit())
+    changed = true;
+  
   IgInputDouble ("min", &squares->min);
+  if (IgIsItemDeactivatedAfterEdit())
+    changed = true;
+  
   IgInputDouble ("max", &squares->max);
+  if (IgIsItemDeactivatedAfterEdit())
+    changed = true;
+  
   IgInputDouble ("spread", &squares->spread);
-  IgCheckbox ("linear", &squares->linear);
+  if (IgIsItemDeactivatedAfterEdit())
+    changed = true;
+  
+  if (IgCheckbox ("linear", &squares->linear))
+    changed = true;
+  
+  return changed;
 }
 
 static char *squares_command (UIDrawItem *ui)
@@ -27,7 +43,7 @@ static char *squares_command (UIDrawItem *ui)
 
   if (asprintf (&command,
                 "squares (color = \"%s\", min = %g, max = %g, spread = %g, linear = %d);",
-                squares->color, squares->min, squares->max, squares->spread, squares->linear))
+                squares->color, squares->min, squares->max, squares->spread, squares->linear) < 0)
     return NULL;
 
   return command;

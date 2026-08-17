@@ -16,7 +16,14 @@ typedef struct {
 int  display_start (void);
 void display_publish (DisplayFrame *frame);
 void display_stop (void);
-void display_wait (void);
+
+typedef enum {
+  DISPLAY_NO_REDRAW,
+  DISPLAY_REDRAW,
+  DISPLAY_STOP
+} DisplayStatus;
+
+DisplayStatus display_redraw (void);
 
 typedef struct {
   bool lighting;
