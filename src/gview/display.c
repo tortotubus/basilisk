@@ -662,8 +662,8 @@ static void *display_thread (void *arg)
     return NULL;
   }
 
-  window = glfwCreateWindow (800, 800,
-                             "Basilisk",
+  window = glfwCreateWindow (window_width, window_height,
+                             "gview",
                              NULL, NULL);
 
   if (!window) {

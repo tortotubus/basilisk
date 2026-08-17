@@ -10,7 +10,9 @@ EXCLUDE = display.c
 libgview.a: display.o ../grid/gpu/glad.o dcimgui_impl_glfw.o dcimgui_impl_opengl3.o dcimgui.o
 	ar cr libgview.a $^
 
-display.o: display.h gui/ui.c ../grid/gpu/glad.h
+display.o: display.h ../grid/gpu/glad.h \
+	gui/ui.c \
+	gui/squares.c
 
 %.o: gui/bindings/%.cpp
 	g++ $(CFLAGS) -I/usr/include/imgui -I/usr/include/imgui/backends -c -o $@ $<

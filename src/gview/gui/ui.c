@@ -5,8 +5,9 @@
 /**
 # Configuration */
 
+static const int window_width = 800, window_height = 600;
 static const float font_size = 18.f;
-static const float items_width = 260.f;
+static const float items_width = 200.f;
 static const float ui_top = 20.f;
 
 /**
@@ -32,43 +33,48 @@ static void ui_destroy()
 }
 
 /**
-# Drawing items */
+# Draw item */
 
-#include "bindings/dcimgui.h"
-#include <GLFW/glfw3.h>
-#include <stdlib.h>
-#include <string.h>
+typedef struct UIDrawItem UIDrawItem;
+
+struct UIDrawItem {
+  unsigned int id;
+  const char *name;
+  bool visible;
+
+  void (*properties) (UIDrawItem *);
+  const char *(*summary) (UIDrawItem *);
+  char *(*command) (UIDrawItem *);
+};
+
+#include "squares.c"
 
 typedef struct {
-  unsigned int id;
-  char *name;
-  char *parameters;
-  bool visible;
-} DisplayDrawItem;
+  UIDrawItem **items;
+  int nitems;
+} UIDrawList;
 
-static DisplayDrawItem *draw_items;
-static int ndraw_items;
+static UIDrawList draw_list;
 static unsigned int next_draw_item_id = 1;
 static unsigned int selected_draw_id;
 
-static void ui_add_draw_item (const char *name)
-{
-  DisplayDrawItem item = {
-    .id = next_draw_item_id++,
-    .name = strdup (name),
-    .parameters = strdup (""),
-    .visible = true
-  };
+static bool properties_open;
 
-  draw_items = realloc (draw_items,
-                         (ndraw_items + 1)*sizeof(DisplayDrawItem));
-  draw_items[ndraw_items++] = item;
+UIDrawItem *ui_squares_new (unsigned int id);
+
+static void ui_add_draw_item (UIDrawItem *item)
+{
+  draw_list.items = realloc (draw_list.items,
+                             (draw_list.nitems + 1)*
+                             sizeof(UIDrawItem *));
+
+  draw_list.items[draw_list.nitems++] = item;
 }
 
 static int ui_find_draw_item (unsigned int id)
 {
-  for (int i = 0; i < ndraw_items; i++)
-    if (draw_items[i].id == id)
+  for (int i = 0; i < draw_list.nitems; i++)
+    if (draw_list.items[i]->id == id)
       return i;
 
   return -1;
@@ -76,32 +82,32 @@ static int ui_find_draw_item (unsigned int id)
 
 static void ui_delete_draw_item (int index)
 {
-  free (draw_items[index].name);
-  free (draw_items[index].parameters);
+  unsigned int id = draw_list.items[index]->id;
 
-  memmove (&draw_items[index], &draw_items[index + 1],
-           (ndraw_items - index - 1)*sizeof(DisplayDrawItem));
-  ndraw_items--;
-
-  if (ndraw_items == 0) {
-    free (draw_items);
-    draw_items = NULL;
+  if (selected_draw_id == id) {
+    selected_draw_id = 0;
+    properties_open = false;
   }
 
-  selected_draw_id = 0;
+  free (draw_list.items[index]);
+
+  memmove (&draw_list.items[index],
+           &draw_list.items[index + 1],
+           (draw_list.nitems - index - 1)*sizeof(UIDrawItem *));
+
+  draw_list.nitems--;
+
+  if (draw_list.nitems == 0) {
+    free (draw_list.items);
+    draw_list.items = NULL;
+  }
 }
 
 static void ui_draw_menu (void)
 {
   if (IgBeginMenu ("Draw")) {
     if (IgMenuItem ("squares"))
-      ui_add_draw_item ("squares");
-
-    if (IgMenuItem ("draw_vof"))
-      ui_add_draw_item ("draw_vof");
-
-    if (IgMenuItem ("isoline"))
-      ui_add_draw_item ("isoline");
+      ui_add_draw_item (ui_squares_new (next_draw_item_id++));
 
     IgEndMenu ();
   }
@@ -113,47 +119,86 @@ static void ui_draw_list (int width, int height)
                       ImGuiCond_Always);
   IgSetNextWindowSize ((ImVec2){items_width, height - ui_top},
                        ImGuiCond_Always);
-
   if (IgBegin ("Draw", NULL,
                ImGuiWindowFlags_NoMove |
                ImGuiWindowFlags_NoResize |
                ImGuiWindowFlags_NoCollapse)) {
 
-    for (int i = 0; i < ndraw_items; i++) {
-      bool selected = draw_items[i].id == selected_draw_id;
-
-      IgPushIDInt (draw_items[i].id);
-
-      IgCheckbox ("##visible", &draw_items[i].visible);
-      IgSameLine ();
-
-      if (IgSelectableEx (draw_items[i].name, selected, 0,
-                          (ImVec2){0, 0}))
-        selected_draw_id = draw_items[i].id;
-
-      if (IgBeginPopupContextItem ()) {
-        if (IgMenuItem ("Properties"))
-          selected_draw_id = draw_items[i].id;
-
-        if (IgMenuItem ("Delete")) {
-          ui_delete_draw_item (i);
-          IgEndPopup ();
-          IgPopID ();
-          break;
-        }
-
-        IgEndPopup ();
-      }
-  
-      IgPopID ();
-    }
-
     if (selected_draw_id && IgIsKeyPressed (ImGuiKey_Delete)) {
       int index = ui_find_draw_item (selected_draw_id);
+
       if (index >= 0)
         ui_delete_draw_item (index);
     }
+
+    if (IgBeginTable ("draw_items", 3,
+                      ImGuiTableFlags_BordersInnerV |
+                      ImGuiTableFlags_Resizable |
+                      ImGuiTableFlags_SizingFixedFit)) {
+
+      IgTableSetupColumnEx ("", ImGuiTableColumnFlags_WidthFixed, 30.f, 0);
+      IgTableSetupColumnEx ("Draw", ImGuiTableColumnFlags_WidthFixed, 100.f, 0);
+      IgTableSetupColumnEx ("Properties",
+                            ImGuiTableColumnFlags_WidthStretch, 0.f, 0);
+
+      for (int i = 0; i < draw_list.nitems; i++) {
+        UIDrawItem *item = draw_list.items[i];
+        bool selected = item->id == selected_draw_id;
+
+        IgPushIDInt (item->id);
+
+        IgTableNextRow ();
+
+        if (selected)
+          IgTableSetBgColor (ImGuiTableBgTarget_RowBg1,
+                             IM_COL32 (80, 80, 120, 255), -1);
+        
+        /* Visibility */
+        IgTableNextColumn ();
+        IgCheckbox ("##visible", &item->visible);
+
+        /* Name */
+        IgTableNextColumn ();
+        IgPushStyleColor (ImGuiCol_HeaderHovered, IM_COL32 (0, 0, 0, 0));
+        IgPushStyleColor (ImGuiCol_HeaderActive, IM_COL32 (0, 0, 0, 0));
+        if (IgSelectableEx (item->name, false, 0,
+                            (ImVec2){0, 0})) {
+          selected_draw_id = item->id;
+          properties_open = true;
+        }
+        IgPopStyleColorEx (2);
+ 
+        /* Summary */
+        IgTableNextColumn ();
+        IgPushStyleColor (ImGuiCol_HeaderHovered, IM_COL32 (0, 0, 0, 0));
+        IgPushStyleColor (ImGuiCol_HeaderActive, IM_COL32 (0, 0, 0, 0));
+        if (IgSelectableEx (item->summary (item), false, 0,
+                            (ImVec2){0, 0})) {
+          selected_draw_id = item->id;
+          properties_open = true;
+        }
+        IgPopStyleColorEx (2);
+ 
+        IgPopID ();
+      }
+
+      IgEndTable ();
+    }
   }
+  IgEnd();
+}
+
+static void ui_draw_properties (void)
+{
+  int index = ui_find_draw_item (selected_draw_id);
+
+  if (index < 0 || !properties_open)
+    return;
+
+  UIDrawItem *item = draw_list.items[index];
+
+  if (IgBegin (item->name, &properties_open, 0))
+    item->properties (item);
 
   IgEnd ();
 }
@@ -165,9 +210,6 @@ The UI belongs exclusively to the display thread. */
 
 #include "bindings/dcimgui.h"
 #include <GLFW/glfw3.h>
-
-/**
-Draw the user interface. */
 
 static void ui (GLFWwindow *window)
 {
@@ -185,7 +227,18 @@ static void ui (GLFWwindow *window)
         glfwSetWindowShouldClose (window, GLFW_TRUE);
       IgEndMenu ();
     }
+    
+    if (IgBeginMenu ("Edit")) {
+      int index = ui_find_draw_item (selected_draw_id);
+      bool have_selection = index >= 0;
 
+      if (IgMenuItemEx ("Delete", NULL, false, have_selection)) {
+        ui_delete_draw_item (index);
+      }
+
+      IgEndMenu ();
+    }
+    
     if (IgBeginMenu ("View")) {
       IgMenuItem ("Reset view");
       IgEndMenu ();
@@ -197,7 +250,8 @@ static void ui (GLFWwindow *window)
   }
 
   ui_draw_list (width, height);
-
+  ui_draw_properties ();
+  
   IgRender ();
   cImGui_ImplOpenGL3_RenderDrawData (IgGetDrawData ());
 }
