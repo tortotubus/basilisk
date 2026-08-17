@@ -6,9 +6,8 @@
 /**
 # Configuration */
 
-static const int window_width = 800, window_height = 600;
+static const int window_width = 1024, window_height = 768;
 static const float font_size = 18.f;
-static const float items_width = 200.f;
 static const float ui_top = 20.f;
 
 /**
@@ -120,13 +119,19 @@ static bool ui_draw_menu (void)
 static bool ui_draw_list (int width, int height)
 {
   bool changed = false;
-  
-  IgSetNextWindowPos ((ImVec2){width - items_width, ui_top},
-                      ImGuiCond_Always);
-  IgSetNextWindowSize ((ImVec2){items_width, height - ui_top},
+
+  static float items_width = 250;
+  static float items_width_start;
+
+  int lwidth = items_width;
+
+  /* Draw window */
+  IgSetNextWindowPos ((ImVec2){0, ui_top}, ImGuiCond_Always);
+  IgSetNextWindowSize ((ImVec2){lwidth, height - ui_top},
                        ImGuiCond_Always);
   if (IgBegin ("Draw", NULL,
                ImGuiWindowFlags_NoMove |
+               ImGuiWindowFlags_NoTitleBar |
                ImGuiWindowFlags_NoResize |
                ImGuiWindowFlags_NoCollapse)) {
 
@@ -144,10 +149,17 @@ static bool ui_draw_list (int width, int height)
                       ImGuiTableFlags_Resizable |
                       ImGuiTableFlags_SizingFixedFit)) {
 
-      IgTableSetupColumnEx ("", ImGuiTableColumnFlags_WidthFixed, 30.f, 0);
-      IgTableSetupColumnEx ("Draw", ImGuiTableColumnFlags_WidthFixed, 100.f, 0);
+      IgTableSetupColumnEx ("",
+                            ImGuiTableColumnFlags_WidthFixed,
+                            30.f, 0);
+
+      IgTableSetupColumnEx ("Draw",
+                            ImGuiTableColumnFlags_WidthFixed,
+                            100.f, 0);
+
       IgTableSetupColumnEx ("Properties",
-                            ImGuiTableColumnFlags_WidthStretch, 0.f, 0);
+                            ImGuiTableColumnFlags_WidthStretch,
+                            0.f, 0);
 
       for (int i = 0; i < draw_list.nitems; i++) {
         UIDrawItem *item = draw_list.items[i];
@@ -194,7 +206,53 @@ static bool ui_draw_list (int width, int height)
       IgEndTable ();
     }
   }
+
+  IgEnd ();
+  
+  /**
+  Draggable separator. */
+
+  const int separator_width = 10;
+  
+  IgPushStyleVarImVec2 (ImGuiStyleVar_WindowMinSize, (ImVec2){0.f, 0.f});
+  IgSetNextWindowPos ((ImVec2){lwidth - separator_width/2.f, ui_top},
+                      ImGuiCond_Always);
+  IgSetNextWindowSize ((ImVec2){separator_width, height - ui_top},
+                       ImGuiCond_Always);
+  ImVec2 old_padding = IgGetStyle()->WindowPadding;
+  IgGetStyle()->WindowPadding = (ImVec2){0.f, 0.f};
+  if (IgBegin ("##draw_separator", NULL,
+               ImGuiWindowFlags_NoDecoration |
+               ImGuiWindowFlags_NoMove |
+               ImGuiWindowFlags_NoResize |
+               ImGuiWindowFlags_NoTitleBar |
+               ImGuiWindowFlags_NoScrollbar |
+               ImGuiWindowFlags_NoCollapse | 
+               // ImGuiWindowFlags_NoSavedSettings |
+               ImGuiWindowFlags_NoBringToFrontOnFocus)) {
+
+    IgButtonEx ("##separator", IgGetContentRegionAvail());
+
+    if (IgIsItemActivated ())
+      items_width_start = items_width;
+
+    if (IgIsItemActive ()) {
+      ImVec2 delta = IgGetMouseDragDelta (0, -1.f);
+
+      items_width = items_width_start + delta.x;
+
+      if (items_width < 150)
+        items_width = 150;
+      if (items_width > 600)
+        items_width = 600;
+    }
+
+  }
+
   IgEnd();
+  
+  IgPopStyleVar();
+  IgGetStyle()->WindowPadding = old_padding;
 
   return changed;
 }
@@ -209,6 +267,7 @@ static bool ui_draw_properties (void)
   UIDrawItem *item = draw_list.items[index];
   bool changed = false;
   
+  IgSetNextWindowSize ((ImVec2){400.f, 200.f}, ImGuiCond_FirstUseEver);
   if (IgBegin (item->name, &properties_open, 0))
     changed = item->properties (item);
 
@@ -250,6 +309,7 @@ static bool ui (GLFWwindow *window)
 
       if (IgMenuItemEx ("Delete", NULL, false, have_selection)) {
         ui_delete_draw_item (index);
+        changed = true;
       }
 
       IgEndMenu ();
