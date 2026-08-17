@@ -85,7 +85,7 @@ static void gview_redraw()
 
 event display_ui_update (i++)
 {
-  gview_redraw();
+  gview_redraw(); // fixme: should limit the refresh rate at 50Hz
 }
 
 event display_cleanup (t = end)

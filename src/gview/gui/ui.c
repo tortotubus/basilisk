@@ -47,7 +47,7 @@ struct UIDrawItem {
   char *(*command) (UIDrawItem *);
 };
 
-#include "squares.c"
+#include "../../draw_ui.h"
 
 typedef struct {
   UIDrawItem **items;
