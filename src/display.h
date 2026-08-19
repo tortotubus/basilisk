@@ -803,8 +803,9 @@ event refresh_display (i++, last)
 
   static timer global_timer = {0};
   static double poll_elapsed = 0.;
-  int refresh = (poll_elapsed <=
-		 display_usage/100.*timer_elapsed (global_timer));
+  double elapsed = timer_elapsed (global_timer);
+  bool refresh = (poll_elapsed <= display_usage/100.*elapsed &&
+                  elapsed > 1./50.); // 50 Hz max
 #if _MPI
   MPI_Bcast (&refresh, 1, MPI_INT, 0, MPI_COMM_WORLD);
 #endif
