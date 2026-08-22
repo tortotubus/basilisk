@@ -794,13 +794,13 @@ void display_init()
 
 event refresh_display (i++, last)
 {
-  do {
-    if (display_play)
-      display_update (i);
-    if (display_poll (display_play ? - 1 : 0))
-      display_update (i);
-  } while (display_play < 0);
-
+  display_poll (0);
+  if (display_play == 1) // Step
+    display_play = -1;
+  while (display_play == -1) { // Paused
+    display_update (i);
+    display_poll (-1);
+  }
   static timer global_timer = {0};
   static double poll_elapsed = 0.;
   double elapsed = timer_elapsed (global_timer);
