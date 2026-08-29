@@ -77,7 +77,10 @@ display ("squares (color = 'u.x', spread = -1);", true);
 # define DISPLAY_RANGE "7100:7200"
 #endif
 
-#define debug(...) do { if (Display.debug) fprintf (qerr, __VA_ARGS__), fflush(qerr); } while(0)
+#define debug(...) do { if (Display.debug) {                            \
+      fprintf (qerr, "%s:%d:%s: ", __FILE__, LINENO, __func__);         \
+      fprintf (qerr, __VA_ARGS__), fflush(qerr);                        \
+    }} while(0)
 
 #include <netdb.h>
 #include <wsServer/include/ws.h>
@@ -93,13 +96,42 @@ typedef struct {
 
 KHASH_MAP_INIT_STR(strhash, DisplayClient *)
 
+#define MAXREADY 256
+  
 static struct {
   khash_t(strhash) * objects;
   int sock, port;
-  char * error;
+  char * error, * status;
   Array * controls;
   bool debug;
+  struct {
+    int fd;
+    bool ready;
+  } ready[MAXREADY];
+  int nready;
 } Display = { .sock = -1 };
+
+static bool display_ready (int fd)
+{
+  for (int i = 0; i < Display.nready; i++)
+    if (Display.ready[i].fd == fd)
+      return Display.ready[i].ready;
+  return true;
+}
+
+static void display_set_ready (int fd, bool ready)
+{
+  int found = -1;
+  for (int i = 0; i < Display.nready && found < 0; i++)
+    if (Display.ready[i].fd == fd)
+      found = i;
+  if (found < 0) {
+    assert (Display.nready < MAXREADY);
+    found = Display.nready++;
+    Display.ready[found].fd = fd;
+  }
+  Display.ready[found].ready = ready;
+}
 
 static void display_display()
 {
@@ -107,13 +139,18 @@ static void display_display()
   for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects);
        ++k)
     if (kh_exist (Display.objects, k)) {
-      debug ("%s", kh_key (Display.objects, k));
+      char * s = NULL;
       DisplayClient * client = kh_value (Display.objects, k);
       while (client->fd >= 0) {
-	debug (" %d/%d", client->fd, client->iter);
+        if (Display.debug) {
+          char * s1;
+          asprintf (&s1, "%s %d/%d", s ? s : "", client->fd, client->iter);
+          free (s); s = s1;
+        }
 	client++;
       }
-      debug ("\n");
+      debug ("%s%s\n", kh_key (Display.objects, k), s);
+      free (s);
     }
   debug ("--------------------------\n");
 }
@@ -138,10 +175,18 @@ static char * read_file_into_buffer (FILE * fp)
 static void display_command (const char * command)
 {
   debug ("display_command (%s)\n", command);
-  
-  vertex_buffer_setup();
-  VertexBuffer.vertex = 0; // fixme
 
+  free (Display.error);
+  Display.error = NULL;
+  
+  vertex_buffer_setup (false);
+
+  if (!strcmp (command, "status();")) {
+    if (Display.status)
+      Display.error = strdup (Display.status);
+    return;
+  }
+  
   // Temporarily redirect stderr to catch errors
   int bak = -1;
   if (pid() == 0) {
@@ -156,8 +201,6 @@ static void display_command (const char * command)
   bool status = process_line (line);
   free (line);
   
-  free (Display.error);
-  Display.error = NULL;
   if (status) {
     if (VertexBuffer.type < 0)
       VertexBuffer.type = 0;
@@ -247,6 +290,11 @@ static int display_send (const char * command, int fd)
 {
   int status = 0;
 
+  if (!display_ready (fd)) {
+    debug ("%d not ready: not sending '%s'\n", fd, command);
+    return 0;
+  }
+
   debug ("sending '%s' to %d\n", command, fd);
   
   unsigned int commandlen = strlen (command);
@@ -293,6 +341,10 @@ static int display_send (const char * command, int fd)
     if (pid() == 0 && status >= 0 &&
 	ws_send (fd, Display.error, errorlen) < errorlen)
       status = -1;
+    if (!strcmp (command, "status();")) {
+      free (Display.error);
+      Display.error = NULL;
+    }
   }
   else {
     if (pid() == 0 && status >= 0 &&
@@ -377,7 +429,7 @@ static void display_remove (const char * command, int fd)
   debug ("removing '%s'\n", command);
   khiter_t k = kh_get (strhash, Display.objects, command);
   if (k == kh_end (Display.objects))
-    debug ("display_remove(): error! could not find '%s' (%d)\n",
+    debug ("display_remove(): could not find '%s' (%d)\n",
 	   command, fd);
   else
     array_remove (k, fd);
@@ -517,12 +569,16 @@ void display_onclose (int fd)
   display_display();
 }
 
-void display_onmessage (int fd, const char * msg, size_t size, int type)
+void display_onmessage (int fd, void * data, size_t size, int type)
 {
   if (type == WS_FR_OP_TXT) {
-    if (!msg)
+    if (!data)
       fprintf (stderr, "error receiving data on websocket\n");
-    else switch (msg[0]) {
+    else {
+      char msg[size + 1];
+      memcpy (msg, data, size); msg[size] = '\0';
+      debug ("display_onmessage: %s\n", msg);
+      switch (msg[0]) {
       case '+': display_add (msg + 1, fd); break;
       case '-': display_remove (msg + 1, fd); break;
       case '#': display_control_update (msg + 1, fd); break;
@@ -531,6 +587,19 @@ void display_onmessage (int fd, const char * msg, size_t size, int type)
 			msg);
 	break;
       }
+    }
+  }
+  else if (type == WS_FR_OP_BIN) {
+    static const unsigned char throttle_magic[] = {
+      'T', 'R', 'A', 'N', 'S', 'F', 'E', 'R',
+      '_', 'C', 'T', 'R', 'L'
+    };
+    static const int len = sizeof(throttle_magic);
+    if (size == len + 1 && !memcmp (data, throttle_magic, len)) {
+      bool ready = ((char *)data)[len];
+      debug ("throttling: %s\n", ready ? "ready" : "not ready");
+      display_set_ready (fd, ready);
+    }
   }
   else
     fprintf (stderr, "display_onmessage: error: unexpected message type '%d'\n",
@@ -566,8 +635,7 @@ void display_onopen (int fd)
 
 static void display_update (int i)
 {
-  for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects);
-       ++k)
+  for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects); ++k)
     if (kh_exist (Display.objects, k)) {
       DisplayClient * client = kh_value (Display.objects, k);
       while (client->fd >= 0) {
@@ -581,17 +649,17 @@ static void display_update (int i)
 	client = kh_value (Display.objects, k);
 	while (client->fd >= 0) {
 	  if (client->iter < i) {
-	      client->iter = i;
-	      if (display_send (command, client->fd) < 0) {
-		debug ("error sending '%s' to '%d'\n", command, client->fd);
-		if (pid() == 0)
-		  close (client->fd);
-		display_onclose (client->fd);
-		if (!kh_exist (Display.objects, k))
-		  break;
-	      }
-	      else
-		client++;
+            client->iter = i;
+            if (display_send (command, client->fd) < 0) {
+              debug ("error sending '%s' to '%d'\n", command, client->fd);
+              if (pid() == 0)
+                close (client->fd);
+              display_onclose (client->fd);
+              if (!kh_exist (Display.objects, k))
+                break;
+            }
+            else
+              client++;
 	  }
 	  else
 	    client++;
@@ -731,6 +799,9 @@ static void display_destroy()
     free (d->tooltip);
   }
   array_free (Display.controls);
+
+  free (Display.error);
+  free (Display.status);
   
   if (pid() == 0) {
     remove ("display.html");
@@ -794,6 +865,9 @@ void display_init()
 
 event refresh_display (i++, last)
 {
+  free (Display.status);
+  assert (asprintf (&Display.status, "t: %12f i: %6d", t, i) > 0);
+  
   display_poll (0);
   if (display_play == 1) // Step
     display_play = -1;
