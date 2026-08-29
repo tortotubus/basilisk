@@ -60,15 +60,14 @@ static void basilisk_display_publish (void)
 
 event display_init (i = 0)
 {
-  Gview.rotation = Gview.lighting = dimension > 2;
-  display_start();
+  display_start (dimension, true, display_defaults);
 }
 
 static void gview_redraw()
 {
   const char * commands = ui_commands();
   if (commands) {
-    vertex_buffer_setup();
+    vertex_buffer_setup (true);
     char * copy = strdup (commands);
     char * line = copy, * end;
     int l = 1;
@@ -85,12 +84,16 @@ static void gview_redraw()
 
 event display_ui_update (i++)
 {
-  gview_redraw(); // fixme: should limit the refresh rate at 50Hz
+  static timer t = {0};
+  if (timer_elapsed (t) > 1./50.) { // 50 Hz max
+    t = timer_start();
+    gview_redraw();
+  }
 }
 
 event display_cleanup (t = end)
 {
-  if (Gview.wait) {
+  if (display_wait()) {
     DisplayStatus redraw;
     while ((redraw = display_redraw()) != DISPLAY_STOP) {
       if (redraw == DISPLAY_REDRAW)

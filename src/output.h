@@ -578,7 +578,7 @@ first-order.
 of the domain for which *mask* is negative. 
 
 *map*
-: the colormap: *jet*, *cool_warm* or *gray*. Default is *jet*.
+: the colormap: *jet*, *cool_warm*, *gray*, *blue_white_red* etc. Default is *jet*.
 
 *opt*
 : options to pass to 'convert' or to the 'ppm2???' scripts (used

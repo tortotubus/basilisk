@@ -67,7 +67,7 @@ extern "C"
 #ifdef IMGUI_USER_CONFIG
 #include IMGUI_USER_CONFIG
 #endif // #ifdef IMGUI_USER_CONFIG
-#include "imconfig.h"  //-----------------------------------------------------------------------------
+  // #include "imconfig.h"  //-----------------------------------------------------------------------------
 #ifndef IMGUI_DISABLE
 // [SECTION] Header mess
 //-----------------------------------------------------------------------------
@@ -3322,7 +3322,7 @@ typedef enum
 #ifdef IMGUI_USER_H_FILENAME
 #include IMGUI_USER_H_FILENAME
 #else
-#include "imgui_user.h"
+// #include "imgui_user.h"
 #endif // #ifdef IMGUI_USER_H_FILENAME
 #endif // #ifdef IMGUI_INCLUDE_IMGUI_USER_H
 #endif// #ifndef IMGUI_DISABLE

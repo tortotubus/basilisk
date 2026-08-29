@@ -1,34 +1,49 @@
-#include <stddef.h>
-#include <stdbool.h>
+#ifndef DISPLAY_CONTROL_H
+#define DISPLAY_CONTROL_H
+
+void display_add_item (const char * command);
+void display_remove_item (unsigned int id);
+void display_update_item (unsigned int id, const char * command);
+void display_item_visible (unsigned int id, bool visible);
+void display_connect (const char * host, int port);
+void display_disconnect();
+bool display_load (const char * filename);
+
+void display_reset_view ();
+void display_front_view ();
+void display_back_view ();
+void display_left_view ();
+void display_right_view ();
+void display_top_view ();
+void display_bottom_view ();
+void display_iso_view ();
+
+void display_set_running (int play);
+void display_set_connected (int connected);
 
 typedef struct {
-  float *position;
-  float *normal;
-  float *color;
-  unsigned int *index, *lindex;
-  size_t position_len;
-  size_t normal_len;
-  size_t color_len;
-  size_t index_len, lindex_len;
-  int primitive;
-} DisplayFrame;
+  const char * name;
+  char ** keys;
+  char ** values;
+  int n;
+} DisplayControl;
 
-int  display_start (void);
-void display_publish (DisplayFrame *frame);
-void display_stop (void);
-
-typedef enum {
-  DISPLAY_NO_REDRAW,
-  DISPLAY_REDRAW,
-  DISPLAY_STOP
-} DisplayStatus;
-
-DisplayStatus display_redraw (void);
+void display_control_update (const char * command);
 
 typedef struct {
-  bool lighting;
-  bool rotation;
-  bool wait;
-} GviewParameters;
+  float tx, ty, tz;
+  float sx, sy, sz;
+  float rotation[4];       /* x, y, z, w, as in view.h */
+  float fov;
+  float near, far;
+  float bg[4];
+  
+  double mouse_x, mouse_y;
+  bool rotating;
+  bool panning;
+  bool zooming;
+} DisplayCamera;
 
-extern GviewParameters Gview;
+extern DisplayCamera Camera;
+
+#endif

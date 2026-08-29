@@ -621,22 +621,6 @@ bool save (char * file = NULL, char * format = "ppm", char * opt = NULL,
 The functions below parse a text file and perform the corresponding
 function calls. */
 
-static char * remove_blanks (char * line)
-{
-  while (strchr (" \t", *line)) line++;
-  char * s = line, * cur = line;
-  bool instring = false;
-  while (*s != '\0' && *s != '#') {
-    if (*s == '"')
-      instring = !instring;
-    if (instring || !strchr (" \t", *s))
-      *cur++ = *s;
-    s++;
-  }
-  *cur = '\0';
-  return line;
-}
-
 #include "parse.h"
 
 bool process_line (char * line)
