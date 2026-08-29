@@ -24,7 +24,7 @@ int main (int argc, char * argv[])
 {
   char * file = "dump"; argc--; argv++;
   for (char * arg = *argv; argc; argc--, arg = *++argv) {
-    if (!strcmp (arg, "-debug") || !strcmp (arg, "-d"))
+    if (!strcmp (arg, "--debug") || !strcmp (arg, "-d"))
       Display.debug = true;
     else
       file = arg;

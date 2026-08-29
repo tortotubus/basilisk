@@ -54,13 +54,13 @@ postproc.o: postproc.c
 # postproc.c: postproc.lex
 #	flex -P post -o postproc.c postproc.lex
 
-bview2D: bview.c
+bview2D: bview.c display.h view.h draw.h utils.h draw_get.h
 	./qcc $(CFLAGS) -autolink bview.c -o bview2D -lfb_tiny -lm
 
-bview3D: bview.c
+bview3D: bview.c display.h view.h draw.h utils.h draw_get.h
 	./qcc $(CFLAGS) -autolink -grid=octree bview.c -o bview3D -lfb_tiny -lm
 
-bview2Dm: bview.c
+bview2Dm: bview.c display.h view.h draw.h utils.h draw_get.h
 	./qcc $(CFLAGS) -autolink -grid=multigrid bview.c -o bview2Dm -lfb_tiny -lm
 
 alltags:
