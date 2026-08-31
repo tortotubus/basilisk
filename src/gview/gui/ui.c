@@ -230,7 +230,22 @@ static void destroy_controls()
 void ui_add_control (DisplayControl control)
 {
   int n = 0;
-  for (UiControl * c = UIState.controls; c && c->name; c++) n++;
+  for (UiControl * c = UIState.controls; c && c->name; c++, n++)
+    if (!strcmp (c->name, control.name)) {
+      const char * type = NULL, * value = NULL;
+      for (int i = 0; i < control.n; i++)
+        if (!strcmp (control.keys[i], "type"))
+          type = control.values[i];
+        else if (!strcmp (control.keys[i], "value"))
+          value = control.values[i];
+      if (type && value && !strcmp (c->type, type)) {
+        if (!strcmp (c->type, "int"))
+          c->val.i = atoi(value);
+        else if (!strcmp (c->type, "double"))
+          c->val.f = atof(value);
+        return;
+      }
+    }
   UIState.controls = realloc (UIState.controls, (n + 2)*sizeof (UiControl));
   UIState.controls[n + 1].name = NULL;
   new_control (&control, &UIState.controls[n]);
