@@ -1424,7 +1424,7 @@ int main (int argc, char * argv[])
   glfwSetCursorPosCallback (window, display_cursor_pos);
   glfwSetKeyCallback (window, key_callback);
  
-  glfwSwapInterval (1);
+  glfwSwapInterval (0); // not sure whether zero or one
 
   display_gl_init();
 
