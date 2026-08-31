@@ -865,7 +865,7 @@ void display_init()
 
 event refresh_display (i++, last)
 {
-  free (Display.status);
+  sysfree (Display.status);
   assert (asprintf (&Display.status, "t: %12f i: %6d", t, i) > 0);
   
   display_poll (0);
