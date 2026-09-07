@@ -9,7 +9,7 @@ SUBDIRS = gui
 
 .PHONY: subdirs $(SUBDIRS) $(TOPTARGETS)
 
-all: subdirs gview-nogui gview
+all: subdirs gview-nogui gview gview.html
 
 subdirs: $(SUBDIRS)
 
@@ -39,5 +39,12 @@ wsclient: wsclient.o transfer_ws.o
 wsclient.o: transfer.h
 
 transfer_ws.o: transfer.h
+
+EMCC_FLAGS = -s USE_GLFW=3 -s FULL_ES2=1 -s ALLOW_MEMORY_GROWTH=1 -s MAX_WEBGL_VERSION=2 \
+	-sMINIFY_HTML=0
+SRCS = display.c transfer_emscripten.c glad.c ../gl/trackball.c
+
+gview.html: $(SRCS) minimal.html
+	emcc -Wall -I$(BASILISK) -O2 $(EMCC_FLAGS) $(SRCS) -o $@ -lwebsocket -lm --shell-file minimal.html
 
 include ../Makefile.defs

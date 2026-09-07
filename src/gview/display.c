@@ -21,6 +21,23 @@ sudo apt install libimgui-dev
 #include <math.h>
 #include <assert.h>
 #include <sys/time.h>
+#ifdef __EMSCRIPTEN__
+# include <emscripten.h>
+# include <emscripten/html5.h>
+
+static EM_BOOL resize_callback (int eventType,
+                                const EmscriptenUiEvent *event,
+                                void *userData)
+{
+  GLFWwindow *window = userData;
+  double width, height;
+
+  emscripten_get_element_css_size ("#canvas-container", &width, &height);
+  glfwSetWindowSize (window, (int) width, (int) height);
+
+  return EM_TRUE;
+}
+#endif // __EMSCRIPTEN__
 
 #include "parse_json.h"
 #include "display.h"
@@ -200,14 +217,14 @@ static void display_cursor_pos (GLFWwindow *window, double x, double y)
   if (Camera.rotating) {
     int width, height;
     glfwGetWindowSize (window, &width, &height);
-    float dquat[4];
+    float dquat[4];    
     gl_trackball (dquat,
-                  (2.0*Camera.mouse_x -            width) / width,
-                  (          height - 2.0*Camera.mouse_y) / height,
-                  (           2.0*x -              width) / width,
-                  (          height -              2.0*y) / height);
+                  (2.0*Camera.mouse_x -            width)/width,
+                  (          height - 2.0*Camera.mouse_y)/height,
+                  (           2.0*x -              width)/width,
+                  (          height -              2.0*y)/height);
     gl_add_quats (dquat, Camera.rotation, Camera.rotation);
-    
+
     Camera.mouse_x = x;
     Camera.mouse_y = y;
   }
@@ -242,12 +259,11 @@ static void display_modelview (float m[16])
 
   display_quaternion_matrix (r, Camera.rotation);
 
-  /*
-   * modelview = translation * rotation * scale
-   *
-   * OpenGL matrices are column-major, so scaling the columns
-   * of the rotation matrix gives rotation * scale.
-   */
+  /**
+  modelview = translation * rotation * scale
+  
+  OpenGL matrices are column-major, so scaling the columns
+  of the rotation matrix gives rotation * scale. */
 
   m[0]  = Camera.sx*r[0];
   m[1]  = Camera.sx*r[1];
@@ -297,12 +313,23 @@ static GLuint compile_shader (GLenum type, const char *source)
 
 static GLuint create_program (void)
 {
+  // Use OpenGL ES 3.0 / WebGL 2.0 shaders for Emscripten
+#ifdef __EMSCRIPTEN__
+  static const char *vertex_source =
+    "#version 300 es\n"
+    "precision highp float;\n"
+    "\n"
+    "in vec3 position;\n"
+    "in vec3 normal;\n"
+    "in vec3 color;\n"
+#else // Use OpenGL >= 4.3 for the native version
   static const char *vertex_source =
     "#version 430\n"
     "\n"
     "layout (location = 0) in vec3 position;\n"
     "layout (location = 1) in vec3 normal;\n"
     "layout (location = 2) in vec3 color;\n"
+#endif
     "\n"
     "uniform mat4 modelview;\n"
     "uniform mat4 projection;\n"
@@ -318,12 +345,20 @@ static GLuint create_program (void)
     "    vertex_normal = mat3 (modelview)*normal;\n"
     "  vertex_color = color;\n"
     "}\n";
-
+#ifdef __EMSCRIPTEN__
+  static const char *fragment_source =
+    "#version 300 es\n"
+    "precision highp float;\n"
+    "\n"
+    "in vec3 vertex_normal;\n"
+    "in vec3 vertex_color;\n"
+#else // Native
   static const char *fragment_source =
     "#version 430\n"
     "\n"
     "in vec3 vertex_normal;\n"
     "in vec3 vertex_color;\n"
+#endif
     "\n"
     "uniform bool lighting;\n"
     "uniform vec3 light_direction;\n"
@@ -474,7 +509,21 @@ static void display_gl_init (void)
 
   modelview_loc = glGetUniformLocation (program, "modelview");
   projection_loc = glGetUniformLocation (program, "projection");
-  
+
+  // OpenGL ES 3.0 / WebGL 2.0 compatible VAO setup
+#ifdef __EMSCRIPTEN__
+  // WebGL 2.0: Use traditional vertex attribute setup
+  glGenVertexArrays (1, &vao);
+  glBindVertexArray (vao);
+
+  // Enable and set up vertex attributes
+  glEnableVertexAttribArray (0);
+  glEnableVertexAttribArray (1);
+  glEnableVertexAttribArray (2);
+
+  glBindVertexArray (0);
+#else
+  // OpenGL 4.3: Use DSA
   glGenVertexArrays (1, &vao);
 
   glBindVertexArray (vao);
@@ -492,9 +541,12 @@ static void display_gl_init (void)
   glVertexAttribBinding (2, 2);
 
   glBindVertexArray (0);
+#endif
 
   glEnable (GL_DEPTH_TEST);
+#ifndef __EMSCRIPTEN__
   glEnable (GL_MULTISAMPLE);
+#endif
 
   display_reset_view();
 }
@@ -608,11 +660,39 @@ static void display_render (GLFWwindow *window)
     DisplayItem * item = Display.items[i];
     
     if (item->vbo[0] && item->visible) {
+#ifdef __EMSCRIPTEN__
+      // OpenGL ES 3.0 / WebGL 2.0: Traditional vertex attribute setup
+      glBindBuffer (GL_ARRAY_BUFFER, item->vbo[0]);
+      glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+      glEnableVertexAttribArray (0);
+
+      if (item->len[1] == item->len[0]) { // normals
+        glBindBuffer (GL_ARRAY_BUFFER, item->vbo[1]);
+        glVertexAttribPointer (1, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray (1);
+      }
+      else { // constant normal
+        glDisableVertexAttribArray (1);
+        float constant_normal[3] = {0,0,1};
+        glVertexAttrib3fv (1, constant_normal);
+      }
+
+      if (item->len[2] == item->len[0]) { // colors
+        glBindBuffer (GL_ARRAY_BUFFER, item->vbo[2]);
+        glVertexAttribPointer (2, 3, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray (2);
+      }
+      else { // constant color
+        glDisableVertexAttribArray (2);
+        glVertexAttrib3fv (2, item->color);
+      }
+#else
+      // OpenGL 4.3: Use DSA
       glBindVertexBuffer (0, item->vbo[0], 0, 3*sizeof(float)); // vertices
 
       if (item->len[1] == item->len[0]) { // normals
         glEnableVertexAttribArray (1);
-        glBindVertexBuffer (1, item->vbo[1], 0, 3*sizeof(float));        
+        glBindVertexBuffer (1, item->vbo[1], 0, 3*sizeof(float));
       }
       else { // constant normal
         glDisableVertexAttribArray (1);
@@ -628,6 +708,7 @@ static void display_render (GLFWwindow *window)
         glDisableVertexAttribArray (2);
         glVertexAttrib3fv (2, item->color);
       }
+#endif
       
       glUniform1i (lighting_loc, item->dimension > 2 && item->len[1] != 0);
  
@@ -1273,7 +1354,9 @@ typedef struct { double x, y, z; } coord;
 
 typedef void * MapFunc, * bview;
 
-#define HUGE 1e30
+#ifndef HUGE
+# define HUGE 1e30
+#endif
 
 #include "../parse.h"
 
@@ -1346,6 +1429,20 @@ static void usage (const char * command)
            command);
 }
 
+static void main_loop (void)
+{
+  if (Display.window) {
+    glfwPollEvents();
+    if (Display.transfer)
+      while (poll_messages (Display.transfer) > 0);
+    display_render (Display.window);
+#if UI
+    ui_display (Display.window);
+#endif
+    glfwSwapBuffers (Display.window);
+  }
+}
+
 int main (int argc, char * argv[])
 {
   int port = 7100, hosti = -1, porti = -1;
@@ -1400,6 +1497,11 @@ int main (int argc, char * argv[])
   }
 
   glfwWindowHint (GLFW_SAMPLES, 4);
+#ifdef __EMSCRIPTEN__
+  glfwWindowHint (GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+  glfwWindowHint (GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint (GLFW_CONTEXT_VERSION_MINOR, 0);
+#endif
   window = glfwCreateWindow (800, 800, "gview", NULL, NULL);
   
   if (!window) {
@@ -1447,20 +1549,22 @@ int main (int argc, char * argv[])
 
   /**
   # Main loop */
-  
+
+#ifdef __EMSCRIPTEN__
+  emscripten_set_resize_callback (EMSCRIPTEN_EVENT_TARGET_WINDOW,
+                                  window,
+                                  EM_FALSE,
+                                  resize_callback);
+  // Use Emscripten's main loop for WebAssembly
+  emscripten_set_main_loop (main_loop, 0, 1);
+#else
+  // Native GLFW loop
   while (!glfwWindowShouldClose (window)) {
 #if FPS
     struct timeval tv;
     gettimeofday (&tv, NULL);
 #endif
-    glfwPollEvents();
-    if (Display.transfer)
-      while (poll_messages (Display.transfer) > 0);
-    display_render (window);
-#if UI
-    ui_display (window);
-#endif
-    glfwSwapBuffers (window);
+    main_loop();
 #if FPS  
     struct timeval tvend;
     gettimeofday (&tvend, NULL);
@@ -1468,6 +1572,7 @@ int main (int argc, char * argv[])
                                         (tvend.tv_usec - tv.tv_usec)/1e6));
 #endif
   }
+#endif
 
   /**
   # Closing and cleanup */

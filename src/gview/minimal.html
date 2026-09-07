@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Basilisk GView (WASM)</title>
+  <style>
+  body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #222;
+  }
+
+  #canvas-container {
+    width: 100vw;
+    height: 100vh;
+  }
+
+  #canvas {
+    display: block;
+  }
+  </style>
+</head>
+<body>
+  <div id="canvas-container">
+    <canvas id="canvas"></canvas>
+  </div>
+
+  <script>
+    canvas.addEventListener("contextmenu", function (event) {
+      event.preventDefault();
+    });
+  </script>
+  
+  {{{ SCRIPT }}}
+  
+  <script>
+    var logElement = document.getElementById('log');
+    function log(msg) {
+      console.log(msg);
+      // logElement.textContent += msg + '\n';
+      // logElement.scrollTop = logElement.scrollHeight;
+    }
+
+    var canvas = document.getElementById('canvas');
+    
+    var Module = {
+      canvas: canvas,
+//      arguments: ['--debug'],
+      print: function(text) { log('STDOUT: ' + text); },
+      printErr: function(text) { log('STDERR: ' + text); },
+/*            
+      onRuntimeInitialized: function() {
+        log('✓ WASM module initialized');
+      },
+      onAbort: function(what) {
+        log('✗ ABORT: ' + what);
+      },
+      preRun: function() {
+        log('Pre-initializing...');
+      },
+      postRun: function() {
+        log('Post-initialization done');
+      },
+      onExit: function(status) {
+        log('Exit with status: ' + status);
+      }
+*/
+    };
+
+    // Catch unhandled errors
+    window.onerror = function(message, source, lineno, colno, error) {
+      log('✗ Global error: ' + message + ' at ' + source + ':' + lineno);
+      return true;
+    };
+
+    window.addEventListener('error', function(event) {
+      log('✗ Event error: ' + event.error.message);
+    });
+  </script>
+</body>
+</html>
