@@ -7,6 +7,7 @@ void display_update_item (unsigned int id, const char * command);
 void display_item_visible (unsigned int id, bool visible);
 void display_connect (const char * host, int port);
 void display_disconnect();
+bool display_load_data (const char *filename, const char *data);
 bool display_load (const char * filename);
 
 void display_reset_view ();

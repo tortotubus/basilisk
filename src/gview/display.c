@@ -1360,58 +1360,106 @@ typedef void * MapFunc, * bview;
 
 #include "../parse.h"
 
-bool display_load (const char * filename)
+bool display_load_data (const char *filename, const char *data)
+{
+  char *copy = strdup (data);
+  if (!copy)
+    return false;
+
+  char *line = copy;
+  while (line) {
+    char *next = strchr (line, '\n');
+    if (next)
+      *next++ = '\0';
+
+    if (*line) {
+      char *command = line;
+      while (strchr (" \t", *command))
+        command++;
+
+      if (strncmp (command, "view", 4)) {
+#if UI
+        ui_add_item (command);
+#else
+        add_item (command, Display.transfer);
+#endif
+      }
+      else {
+        char *s = mystrtok (remove_blanks (command), "(");
+        if (!s) {
+          fprintf (stderr, "gview: error reading '%s'\n", filename);
+          free (copy);
+          return false;
+        }
+
+        unsigned int width = 800, height = 800;
+        float bg[3] = {-1, -1, -1};
+        Params params[] = {
+          {"tx", pfloat, &Camera.tx},
+          {"ty", pfloat, &Camera.ty},
+          {"tz", pfloat, &Camera.tz},
+          {"quat", pfloat, Camera.rotation, 4},
+          {"width", punsigned, &width},
+          {"height", punsigned, &height},
+          {"bg", pfloat, bg, 3},
+          {NULL}
+        };
+
+        if (!parse_params (params)) {
+          free (copy);
+          return false;
+        }
+
+        if (bg[0] >= 0) {
+          memcpy (Camera.bg, bg, 3*sizeof(float));
+          Camera.bg[3] = 1.;
+        }
+
+#if UI
+        ui_set_window_size (Display.window, width, height);
+#else
+        glfwSetWindowSize (Display.window, width, height);
+#endif
+      }
+    }
+
+    line = next;
+  }
+
+  free (copy);
+  return true;
+}
+
+bool display_load (const char *filename)
 {
   FILE *fp = fopen (filename, "r");
   if (!fp) {
     perror (filename);
     return false;
   }
-  char line[1024];
-  while (fgets (line, sizeof line, fp)) {
-    assert (line[strlen(line) - 1] == '\n');
-    line[strlen(line) - 1] = '\0';
-    char * command = line; while (strchr (" \t", *command)) command++;
-    if (strncmp (command, "view", 4)) {
-#if UI
-      ui_add_item (command);
-#else
-      add_item (command, Display.transfer);
-#endif
-    }
-    else {
-      char * s = mystrtok (remove_blanks (command), "(");
-      if (!s) {
-        fprintf (stderr, "gview: error reading '%s'\n", filename);
-        return false;
-      }
-      unsigned int width = 800, height = 800;
-      float bg[3] = {-1,-1,-1};
-      Params params[] = {
-        {"tx", pfloat, &Camera.tx},
-        {"ty", pfloat, &Camera.ty},
-        {"tz", pfloat, &Camera.tz},
-        {"quat", pfloat, Camera.rotation, 4},
-        {"width", punsigned, &width},
-        {"height", punsigned, &height},
-        {"bg", pfloat, bg, 3},
-        {NULL}
-      };
-      if (!parse_params (params))
-        return false;
-      if (bg[0] >= 0) {
-        memcpy (Camera.bg, bg, 3*sizeof(float));
-        Camera.bg[3] = 1.;
-      }
-#if UI
-      ui_set_window_size (Display.window, width, height);
-#else
-      glfwSetWindowSize (Display.window, width, height);
-#endif
-    }
+
+  fseek (fp, 0, SEEK_END);
+  long size = ftell (fp);
+  rewind (fp);
+
+  char *data = malloc (size + 1);
+  if (!data) {
+    fclose (fp);
+    return false;
   }
+
+  if (fread (data, 1, size, fp) != (size_t) size) {
+    free (data);
+    fclose (fp);
+    return false;
+  }
+
+  data[size] = '\0';
   fclose (fp);
-  return true;
+
+  bool result = display_load_data (filename, data);
+  free (data);
+  return result;
 }
 
 /**

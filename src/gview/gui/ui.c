@@ -324,7 +324,36 @@ static void ui_delete_draw_item (UIDrawItem * item)
 /**
 # Save commands */
 
-#include "tinyfiledialogs.h"
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+
+static void browser_download (const char *filename, const char *data)
+{
+  EM_ASM ({
+    const filename = UTF8ToString ($0);
+    const data = UTF8ToString ($1);
+
+    const blob = new Blob ([data], { type: "text/plain" });
+    const url = URL.createObjectURL (blob);
+
+    const a = document.createElement ("a");
+    a.href = url;
+    a.download = filename;
+    a.click ();
+
+    URL.revokeObjectURL (url);
+  }, filename, data);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void gview_file_loaded (const char *filename, const char *data)
+{
+  display_load_data (filename, data);
+}
+
+#else
+# include "tinyfiledialogs.h"
+#endif
 
 static
 const char *ui_commands (void)
@@ -363,6 +392,14 @@ const char *ui_commands (void)
   return commands;
 }
 
+#ifdef __EMSCRIPTEN__
+static void gview_save (const char *filename)
+{
+  const char *commands = ui_commands ();
+  if (commands)
+    browser_download (filename, commands);
+}
+#else
 static void gview_save (const char *filename)
 {
   const char *commands = ui_commands();
@@ -376,6 +413,7 @@ static void gview_save (const char *filename)
   fputs (commands, fp);
   fclose (fp);
 }
+#endif
 
 /**
 # Draw list */
@@ -824,8 +862,15 @@ bool ui_display (GLFWwindow *window)
 
   if (IgBeginMainMenuBar ()) {
     if (IgBeginMenu ("File")) {
+#ifdef __EMSCRIPTEN__
+      if (IgMenuItem ("Save"))
+        gview_save ("display.gv");
+
+      if (IgMenuItem ("Load"))
+        EM_ASM ({ gview_open_file (); });
+#else // !__EMSCRIPTEN__
       const char *filter[] = { "*.gv" };
-        
+
       if (IgMenuItem ("Save")) {
         const char *filename = tinyfd_saveFileDialog ("Save gview", "display.gv",
                                                       1, filter, "gview files");
@@ -839,9 +884,11 @@ bool ui_display (GLFWwindow *window)
         if (filename && display_load (filename))
           changed = true;
       }
-         
+
       if (IgMenuItem ("Quit"))
         glfwSetWindowShouldClose (window, GLFW_TRUE);
+#endif // !__EMSCRIPTEN__
+
       IgEndMenu ();
     }
     
@@ -955,7 +1002,11 @@ void ui_init (GLFWwindow *window)
   ImGuiIO *io = IgGetIO();
   ImFontAtlas_ClearFonts (io->Fonts);
   ImFontAtlas_AddFontFromFileTTF (io->Fonts,
+#ifdef __EMSCRIPTEN__
+                                  "/fonts/DejaVuSans.ttf",
+#else
                                   "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+#endif // !__EMSCRIPTEN__
                                   font_size, NULL, NULL);
   cImGui_ImplGlfw_InitForOpenGL (window, true);
   cImGui_ImplOpenGL3_Init();

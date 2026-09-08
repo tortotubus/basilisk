@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Basilisk GView (WASM)</title>
+  <title>gview</title>
   <style>
   body {
     margin: 0;
@@ -32,7 +32,7 @@
     });
   </script>
   
-  {{{ SCRIPT }}}
+  <script async type="text/javascript" src="gview.js"></script>
   
   <script>
     var logElement = document.getElementById('log');
@@ -77,6 +77,26 @@
     window.addEventListener('error', function(event) {
       log('✗ Event error: ' + event.error.message);
     });
+
+  function gview_open_file() {
+          const input = document.createElement("input");
+          input.type = "file";
+          input.accept = ".gv";
+
+          input.onchange = function () {
+                  const file = input.files[0];
+                  if (!file)
+                          return;
+
+                  file.text().then(function (text) {
+                          Module.ccall("gview_file_loaded", null,
+                                       ["string", "string"],
+                                       [file.name, text]);
+                  });
+          };
+
+          input.click();
+  }
   </script>
 </body>
 </html>
