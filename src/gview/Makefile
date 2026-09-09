@@ -1,7 +1,7 @@
 CFLAGS += -I$(BASILISK) -O2
 
 # these are not Basilisk programs
-EXCLUDE = display.c transfer_ws.c wsclient.c
+EXCLUDE = display.c transfer_ws.c transfer_local.c wsclient.c
 
 TOPTARGETS = all clean
 
@@ -9,7 +9,7 @@ SUBDIRS = gui
 
 .PHONY: subdirs $(SUBDIRS) $(TOPTARGETS)
 
-all: subdirs gview-nogui gview gview.js
+all: subdirs gview-nogui gview libdisplay.a transfer_local.o
 
 subdirs: $(SUBDIRS)
 
@@ -25,12 +25,16 @@ display-nogui.o: display.c $(HEADERS)
 display.o: display.c $(HEADERS) gui/ui.h
 	$(CC) -c $(CFLAGS) -DUI -o $@ $<
 
-gview: display.o transfer_ws.o glad.o \
+libdisplay.a: display.o glad.o \
 	gui/ui.o gui/dcimgui_impl_glfw.o gui/dcimgui_impl_opengl3.o gui/dcimgui.o \
 	gui/tinyfiledialogs.o
-	$(CC) $^ -o $@ -L../gl -lglutils -lglfw -limgui -lstb -lstdc++ -lm
+	ar cr $@ $^
 
-gview-nogui: display-nogui.o transfer_ws.o glad.o
+gview: gview.o transfer_ws.o libdisplay.a
+	$(CC) gview.o transfer_ws.o -o $@ -L. -ldisplay \
+		-L../gl -lglutils -lglfw -limgui -lstb -lstdc++ -lm
+
+gview-nogui: gview.o display-nogui.o transfer_ws.o glad.o
 	$(CC) $^ -o $@ -L../gl -lglutils -lglfw -lm
 
 wsclient: wsclient.o transfer_ws.o
@@ -39,6 +43,8 @@ wsclient: wsclient.o transfer_ws.o
 wsclient.o: transfer.h
 
 transfer_ws.o: transfer.h
+
+transfer_local.o: transfer.h
 
 EMCC_FLAGS = \
 	-s USE_GLFW=3 \
@@ -49,7 +55,7 @@ EMCC_FLAGS = \
 	-sEXPORTED_RUNTIME_METHODS=ccall \
 	--preload-file /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf@/fonts/DejaVuSans.ttf
 
-SRCS = display.c transfer_emscripten.c glad.c ../gl/trackball.c \
+SRCS = gview.c display.c transfer_emscripten.c glad.c ../gl/trackball.c \
 	gui/ui.c \
 	gui/bindings/dcimgui_impl_glfw.cpp \
 	gui/bindings/dcimgui_impl_opengl3.cpp \

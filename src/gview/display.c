@@ -89,12 +89,21 @@ typedef struct {
 
 static DisplayState Display = { .debug = false };
 
+void display_set_debug (bool debug) {
+  Display.debug = debug;
+}
+
 void display_set_connected (int connected)
 {
   Display.connected = connected;
 #if UI
   ui_set_connected (connected);
 #endif
+}
+
+void display_quit()
+{
+  glfwSetWindowShouldClose (Display.window, GLFW_TRUE);
 }
 
 #define debug(...) do { if (Display.debug) {                            \
@@ -732,8 +741,8 @@ static void display_render (GLFWwindow *window)
   glBindVertexArray (0);
 
   if (dimension && dimension != Display.dimension) {
-    debug ("dimension: %d\n", dimension);
-    bool reset_view = (Display.dimension != -1);
+    debug ("dimension: %d %d\n", dimension, Display.dimension);
+    bool reset_view = (Display.dimension > dimension);
     Display.dimension = dimension;
 #if UI
     ui_set_dimension (dimension);
@@ -913,7 +922,7 @@ void sort_by_weight(char *lines[], int weight[], int nlines)
 Display control */
 
 static
-const char * display_control_value (DisplayControl control, const char * key)
+const char * display_control_value (DisplayControlStrings control, const char * key)
 {
   for (int i = 0; i < control.n; i++)
     if (!strcmp (control.keys[i], key))
@@ -921,7 +930,7 @@ const char * display_control_value (DisplayControl control, const char * key)
   return NULL;
 }
 
-void display_control_update (const char * command)
+void display_control_command (const char * command)
 {
   transfer_send (Display.transfer, command, strlen (command), false);
 }
@@ -1118,7 +1127,7 @@ static int poll_messages (struct transfer *transfer)
         int n = parse_entry (msg, &name, keys, values, 16);
         if (n < 0) goto error;
 
-        DisplayControl control = { name, keys, values, n };
+        DisplayControlStrings control = { name, keys, values, n };
 
         const char * value;
         if (!strcmp (name, "Run/Pause") && n == 4 &&
@@ -1244,7 +1253,7 @@ void display_set_running (int play)
     Display.play = play;
     char * s;
     assert (asprintf (&s, "#Run/Pause:%d", Display.play) > 0);
-    display_control_update (s);
+    display_control_command (s);
     debug ("key_callback(): %s\n", s);
     free (s);
 #if UI
@@ -1465,18 +1474,6 @@ bool display_load (const char *filename)
 /**
 # GLFW/OpenGL thread */
 
-static void usage (const char * command)
-{
-  fprintf (stderr,
-           "usage: %s [OPTIONS] [HOST] [PORT]\n"
-           "   The default HOST is 127.0.0.1 and default PORT is 7100.\n"
-           "   The OPTIONS are:\n"
-           "   -g FILE     load .gv parameters\n"
-           "   -d, --debug debugging output\n"
-           "   -h, --help  this message\n",
-           command);
-}
-
 static void main_loop (void)
 {
   if (Display.window) {
@@ -1491,47 +1488,8 @@ static void main_loop (void)
   }
 }
 
-int main (int argc, char * argv[])
+int display_main (const char * host, int port, const char * gv)
 {
-  int port = 7100, hosti = -1, porti = -1;
-  const char * host = "127.0.0.1", * gv = NULL;
-  for (int i = 1; i < argc; i++) {
-    if (!strcmp (argv[i], "--debug") || !strcmp (argv[i], "-d"))
-      Display.debug = true;
-    else if (!strcmp (argv[i], "--help") || !strcmp (argv[i], "-h")) {
-      usage (argv[0]);
-      return 0;
-    }
-    else if (!strcmp (argv[i], "-g")) {
-      if (i == argc - 1) {
-        fprintf (stderr, "%s: error: missing FILE\n", argv[0]);
-        usage (argv[0]);
-        return 1;
-      }
-      gv = argv[i+1];
-      i++;
-    }
-    else if (argv[i][0] == '-') {
-      fprintf (stderr,
-               "%s: unknown option '%s'\n"
-               "  try %s -h\n",
-               argv[0], argv[i], argv[0]);
-      return 1;
-    }
-    else if (hosti < 0)
-      hosti = i;
-    else if (porti < 0)
-      porti = i;
-    else {
-      fprintf (stderr, "usage: %s [OPTIONS] [HOST] [PORT]\n", argv[0]);
-      return 1;
-    }
-  }
-  if (hosti > 0)
-    host = argv[hosti];
-  if (porti > 0)
-    port = atoi (argv[porti]);
-  
   display_connect (host, port);
 #if UI
   ui_set_host (host, port);
@@ -1643,7 +1601,7 @@ int main (int argc, char * argv[])
   glDeleteProgram (program);
 
   glfwDestroyWindow (window);
-  glfwTerminate ();
+  glfwTerminate();
 
   return 0;
 }

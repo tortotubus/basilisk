@@ -1,5 +1,7 @@
-#ifndef DISPLAY_CONTROL_H
-#define DISPLAY_CONTROL_H
+#ifndef DISPLAY_H
+#define DISPLAY_H
+
+#include <stdbool.h>
 
 void display_add_item (const char * command);
 void display_remove_item (unsigned int id);
@@ -7,6 +9,7 @@ void display_update_item (unsigned int id, const char * command);
 void display_item_visible (unsigned int id, bool visible);
 void display_connect (const char * host, int port);
 void display_disconnect();
+void display_quit();
 bool display_load_data (const char *filename, const char *data);
 bool display_load (const char * filename);
 
@@ -21,15 +24,17 @@ void display_iso_view ();
 
 void display_set_running (int play);
 void display_set_connected (int connected);
+void display_set_debug (bool debug);
+int display_main (const char * host, int port, const char * gv);
 
 typedef struct {
   const char * name;
   char ** keys;
   char ** values;
   int n;
-} DisplayControl;
+} DisplayControlStrings;
 
-void display_control_update (const char * command);
+void display_control_command (const char * command);
 
 typedef struct {
   float tx, ty, tz;

@@ -63,10 +63,24 @@ overwrite existing calls, use:
 ~~~literatec
 display ("squares (color = 'u.x', spread = -1);", true);
 ~~~
+
+but be careful that this will work only if this call happens *after*
+the default displays are set, typically in each solver `defaults`
+event.
+
+You can also use the 'load()' command to use a saved .gv file, for example:
+
+~~~literatec
+event init (i = 0) {
+  display ("load ('myview.gv');", true);
+  ...
+}
+~~~
 */
 
 #ifndef DISPLAY_JS
 # define DISPLAY_JS "http://basilisk.ida.upmc.fr/three.js/editor/index.html"
+# pragma autolink -L$BASILISK/wsServer -lws
 #endif
 
 #ifndef DISPLAY_HOST
@@ -84,7 +98,6 @@ display ("squares (color = 'u.x', spread = -1);", true);
 
 #include <netdb.h>
 #include <wsServer/include/ws.h>
-#pragma autolink -L$BASILISK/wsServer -lws
 
 #include "view.h"
 #include "khash.h"
@@ -562,8 +575,7 @@ static char * bview_interface_json()
 void display_onclose (int fd)
 {  
   debug ("closing %d\n", fd);
-  for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects);
-       ++k)
+  for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects); ++k)
     if (kh_exist (Display.objects, k))
       array_remove (k, fd);
   display_display();
@@ -770,8 +782,9 @@ void display_url (FILE * fp)
     fprintf (stderr,
 	     "src/display.h:%d: warning: gethostbyname(\"%s\") returned NULL\n",
 	     LINENO, hostname);
-  fprintf (fp, DISPLAY_JS "?ws://%s:%d", h ? h->h_name : "127.0.0.1",
-	   Display.port);
+  if (strcmp (DISPLAY_JS, ""))
+    fprintf (fp, DISPLAY_JS "?ws://%s:%d", h ? h->h_name : "127.0.0.1",
+             Display.port);
 }
 
 int display_usage = 20; // use 20% of runtime, maximum
@@ -783,7 +796,7 @@ int display_play = DISPLAY < 0 ? -1 : 0;
 int display_play = -1;
 #endif
 
-static void display_destroy()
+static void display_terminate()
 {
   for (khiter_t k = kh_begin (Display.objects); k != kh_end (Display.objects);
        ++k)
@@ -805,9 +818,11 @@ static void display_destroy()
   
   if (pid() == 0) {
     remove ("display.html");
-    
-    // fixme: close connection cleanly
-    close (Display.sock);
+
+    if (strcmp (DISPLAY_JS, "")) {
+      // fixme: close connection cleanly
+      close (Display.sock);
+    }
   }
 }
 
@@ -836,21 +851,23 @@ void display_init()
       exit (1);
     }
 
-    FILE * fp = fopen ("display.html", "w");
-    if (!fp)
-      perror ("display.html");
-    else {
-      fputs ("<head><meta http-equiv=\"refresh\" content=\"0;URL=", fp);
-      display_url (fp);
-      fputs ("\"></head>\n", fp);
-      fclose (fp);
+    if (strcmp (DISPLAY_JS, "")) {
+      FILE * fp = fopen ("display.html", "w");
+      if (!fp)
+        perror ("display.html");
+      else {
+        fputs ("<head><meta http-equiv=\"refresh\" content=\"0;URL=", fp);
+        display_url (fp);
+        fputs ("\"></head>\n", fp);
+        fclose (fp);
+      }
     }
   }
 
   Display.objects = kh_init (strhash);
   Display.controls = array_new();
   
-  free_solver_func_add (display_destroy);
+  free_solver_func_add (display_terminate);
 
 #ifndef DISPLAY
   display_control (display_play, -1, 1, "Run/Pause");

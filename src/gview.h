@@ -1,105 +1,37 @@
-#include "view.h"
-#include "vertexbuffer.h"
 #include "gview/display.h"
-#include "gview/gui/ui.h"
-#pragma autolink -L$BASILISK/gview -lgview -lglfw -limgui -lstb -lstdc++
+#include <pthread.h>
 
-static DisplayFrame * basilisk_display_frame (void)
+static pthread_t gview_thread;
+
+static void * gview_main (void *arg)
 {
-  DisplayFrame *frame;
-  Array *position = VertexBuffer.position;
-  Array *normal = VertexBuffer.normal;
-  Array *color = VertexBuffer.color;
-  Array *index = VertexBuffer.index;
-  Array *lindex = VertexBuffer.lindex;
-
-  frame = malloc (sizeof(DisplayFrame));
-  if (!frame)
-    return NULL;
-
-  frame->position = position->p;
-  frame->normal = normal->p;
-  frame->color = color->p;
-  frame->index = index->p;
-  frame->lindex = lindex->p;
-
-  frame->position_len = position->len;
-  frame->normal_len = normal->len;
-  frame->color_len = color->len;
-  frame->index_len = index->len;
-  frame->lindex_len = lindex->len;
-  frame->primitive = (VertexBuffer.type != 0);
-
-  position->p = NULL;
-  normal->p = NULL;
-  color->p = NULL;
-  index->p = NULL;
-  lindex->p = NULL;
-
-  array_free (position);
-  array_free (normal);
-  array_free (color);
-  array_free (index);
-  array_free (lindex);
-
-  VertexBuffer.position = NULL;
-  VertexBuffer.normal = NULL;
-  VertexBuffer.color = NULL;
-  VertexBuffer.index = NULL;
-  VertexBuffer.lindex = NULL;
-
-  return frame;
+  // display_set_debug (true);
+  if (display_main ("local", 0, NULL))
+    exit (1);
+  return NULL;
 }
 
-static void basilisk_display_publish (void)
+static void gview_terminate()
 {
-  DisplayFrame *frame = basilisk_display_frame();
-  if (frame)
-    display_publish (frame);
-}
-
-event display_init (i = 0)
-{
-  display_start (dimension, true, display_defaults);
-}
-
-static void gview_redraw()
-{
-  const char * commands = ui_commands();
-  if (commands) {
-    vertex_buffer_setup (true);
-    char * copy = strdup (commands);
-    char * line = copy, * end;
-    int l = 1;
-    while ((end = strchr (line, '\n'))) {
-      *end = '\0';
-      fprintf (stderr, "%d: %s\n", l++, line);
-      process_line (line);
-      line = end + 1;
-    }
-    free (copy);
-    basilisk_display_publish();
+  if (pid() == 0) {
+    display_quit();
+    pthread_join (gview_thread, NULL);
   }
 }
 
-event display_ui_update (i++)
+@init_solver
+void gview_init()
 {
-  static timer t = {0};
-  if (timer_elapsed (t) > 1./50.) { // 50 Hz max
-    t = timer_start();
-    gview_redraw();
+  if (pid() == 0 &&
+      pthread_create (&gview_thread, NULL, gview_main, NULL) != 0) {
+    perror ("pthread_create");
+      exit (1);
   }
+  free_solver_func_add (gview_terminate);
 }
 
-event display_cleanup (t = end)
-{
-  if (display_wait()) {
-    DisplayStatus redraw;
-    while ((redraw = display_redraw()) != DISPLAY_STOP) {
-      if (redraw == DISPLAY_REDRAW)
-        gview_redraw();
-      usleep (20000); // 50 Hz max
-    }
-  }
-  display_stop();
-}
+#define DISPLAY_JS ""
+#pragma autolink $BASILISK/gview/transfer_local.o -L$BASILISK/gview -ldisplay \
+  -Lgl -lglutils -lglfw -limgui -lstb -lstdc++ -lm
+#define DISPLAY -1
+#include "display.h"

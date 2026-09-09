@@ -17,5 +17,5 @@ void ui_set_host (const char * host, int port);
 void ui_set_error (int id, const char * error);
 void ui_set_status (const char * status);
   
-void ui_add_control (DisplayControl control);
+void ui_add_control (DisplayControlStrings control);
 void ui_destroy();

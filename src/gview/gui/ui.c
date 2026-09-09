@@ -158,7 +158,7 @@ These files are generated automatically by [/src/Makefile](). */
 # Controls */
 
 static
-void new_control (DisplayControl * control, UiControl * c)
+void new_control (DisplayControlStrings * control, UiControl * c)
 {
   memset (c, 0, sizeof (UiControl));
   c->name = strdup (control->name);
@@ -205,7 +205,7 @@ static void update_control (const UiControl * c)
     assert (asprintf (&s, "#%s:%g", c->name, c->val.f) > 0);
   else
     assert (false);
-  display_control_update (s);
+  display_control_command (s);
   free (s);
 }
 
@@ -227,7 +227,7 @@ static void destroy_controls()
   UIState.controls = NULL;
 }
 
-void ui_add_control (DisplayControl control)
+void ui_add_control (DisplayControlStrings control)
 {
   int n = 0;
   for (UiControl * c = UIState.controls; c && c->name; c++, n++)
@@ -566,25 +566,27 @@ static bool ui_draw_list (int width, int height)
     /**
     Connection */
 
-    if (UIState.connected) {
-      if (IgButton ("Disconnect"))
-        display_disconnect();
-      IgPushStyleColor (ImGuiCol_Text,
-                        UIState.connected > 0 ?
-                        IM_COL32(0,255,0,255) : // Connected: Green
-                        IM_COL32(230,104,30,255)); // Waiting: Orange
-    }
-    else {
-      if (IgButton ("Connect"))
+    if (strcmp (UIState.host, "local:0")) {
+      if (UIState.connected) {
+        if (IgButton ("Disconnect"))
+          display_disconnect();
+        IgPushStyleColor (ImGuiCol_Text,
+                          UIState.connected > 0 ?
+                          IM_COL32(0,255,0,255) : // Connected: Green
+                          IM_COL32(230,104,30,255)); // Waiting: Orange
+      }
+      else {
+        if (IgButton ("Connect"))
+          ui_connect();
+        IgPushStyleColor (ImGuiCol_Text, IM_COL32(255,0,0,255)); // Red
+      }
+      IgSameLine();
+      IgInputText ("##Host", UIState.host, sizeof(UIState.host),
+                   UIState.connected ? ImGuiInputTextFlags_ReadOnly : 0);
+      if (IgIsItemDeactivatedAfterEdit())
         ui_connect();
-      IgPushStyleColor (ImGuiCol_Text, IM_COL32(255,0,0,255)); // Red
+      IgPopStyleColor();
     }
-    IgSameLine();
-    IgInputText ("##Host", UIState.host, sizeof(UIState.host),
-                 UIState.connected ? ImGuiInputTextFlags_ReadOnly : 0);
-    if (IgIsItemDeactivatedAfterEdit())
-      ui_connect();
-    IgPopStyleColor();
 
     /**
     ## Display controls */
@@ -816,12 +818,19 @@ static UIDrawItem * process_line (const char * line)
   if (!s)
     return NULL;
 
+  if (!strcmp (s, "load")) {
+    char * file = NULL;
+    parse_params ((Params[]){{"file", pstring, &file}, {NULL}});
+    if (file)
+      display_load (file);
+    return NULL;
+  }
+
   /**
   The [/src/draw_get.h]() file is generated automatically by [/src/params.awk]()
   and contains parsing commands for the functions defined in
   [/src/draw.h](). */
 
-  if (false);
   #include "../../draw_get.h"
 
   return NULL;
