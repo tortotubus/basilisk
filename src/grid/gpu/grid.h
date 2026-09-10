@@ -1719,11 +1719,11 @@ static void gpu_cpu_sync (scalar * list, SyncMode mode, const char * fname, int 
 	fprintf (stderr, "%s:%d: %s ", fname, line,
 		 mode == GPU_READ ? "importing" : "exporting");
 	copy = true;
-	gpu_cpu_sync_scalar (s.i, s.block, grid_data(), mode);
+	gpu_cpu_sync_scalar (s.i, s.block, grid_data(), field_size(), mode);
         fprintf (stderr, "{%s", s.name);
       }
       else {
-	gpu_cpu_sync_scalar (s.i, s.block, grid_data(), mode);
+	gpu_cpu_sync_scalar (s.i, s.block, grid_data(), field_size(), mode);
         fprintf (stderr, ",%s", s.name);
       }
 #else
