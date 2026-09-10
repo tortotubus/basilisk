@@ -11,7 +11,7 @@ int main (void)
   char line[4096];
   size_t size;
 
-  transfer = transfer_open ("127.0.0.1", 7100, 0);
+  transfer = transfer_open ("loclahost", 7100, 0);
   usleep (1000);
  
   if (!transfer) {

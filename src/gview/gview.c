@@ -7,7 +7,7 @@ static void usage (const char * command)
 {
   fprintf (stderr,
            "usage: %s [OPTIONS] [HOST] [PORT]\n"
-           "   The default HOST is 127.0.0.1 and default PORT is 7100.\n"
+           "   The default HOST is 'localhost' and default PORT is 7100.\n"
            "   The OPTIONS are:\n"
            "   -g FILE     load .gv parameters\n"
            "   -d, --debug debugging output\n"
@@ -18,7 +18,7 @@ static void usage (const char * command)
 int main (int argc, char * argv[])
 {
   int port = 7100, hosti = -1, porti = -1;
-  const char * host = "127.0.0.1", * gv = NULL;
+  const char * host = "localhost", * gv = NULL;
   for (int i = 1; i < argc; i++) {
     if (!strcmp (argv[i], "--debug") || !strcmp (argv[i], "-d"))
       display_set_debug (true);

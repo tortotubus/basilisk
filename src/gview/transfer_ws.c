@@ -14,6 +14,7 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+#include <netdb.h>
 
 #define WS_RECV_BUFFER_SIZE 65536
 
@@ -178,47 +179,55 @@ static void connection_failed (struct transfer *transfer)
 
 static int start_connection (struct transfer *transfer)
 {
-  struct sockaddr_in addr;
-  int fd;
-  int result;
+  struct addrinfo hints, *result, *rp;
+  char port[16];
+  int fd = -1;
+  int error;
+  int connect_result;
 
-  fd = socket (AF_INET, SOCK_STREAM, 0);
+  memset (&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
 
-  if (fd < 0)
+  snprintf (port, sizeof(port), "%d", transfer->port);
+
+  error = getaddrinfo (transfer->host, port, &hints, &result);
+  if (error != 0)
     return -1;
 
-  if (set_nonblocking (fd) < 0) {
+  for (rp = result; rp; rp = rp->ai_next) {
+    fd = socket (rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+    if (fd < 0)
+      continue;
+
+    if (set_nonblocking (fd) < 0) {
+      close (fd);
+      fd = -1;
+      continue;
+    }
+
+    connect_result = connect (fd, rp->ai_addr, rp->ai_addrlen);
+
+    if (connect_result == 0) {
+      transfer->fd = fd;
+      transfer->state = CONNECTION_HANDSHAKING;
+      freeaddrinfo (result);
+      return 0;
+    }
+
+    if (errno == EINPROGRESS) {
+      transfer->fd = fd;
+      transfer->state = CONNECTION_CONNECTING;
+      freeaddrinfo (result);
+      return 0;
+    }
+
     close (fd);
-    return -1;
+    fd = -1;
   }
 
-  memset (&addr, 0, sizeof(addr));
-
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons (transfer->port);
-
-  if (inet_pton (AF_INET, transfer->host, &addr.sin_addr) != 1) {
-    close (fd);
-    return -1;
-  }
-
-  result = connect (fd, (struct sockaddr *) &addr, sizeof(addr));
-
-  if (result == 0) {
-    transfer->fd = fd;
-    transfer->state = CONNECTION_HANDSHAKING;
-    return 0;
-  }
-
-  if (errno != EINPROGRESS) {
-    close (fd);
-    return -1;
-  }
-
-  transfer->fd = fd;
-  transfer->state = CONNECTION_CONNECTING;
-
-  return 0;
+  freeaddrinfo (result);
+  return -1;
 }
 
 static int finish_connect (struct transfer *transfer, int timeout)
