@@ -193,12 +193,9 @@ static void display_command (const char * command)
   Display.error = NULL;
   
   vertex_buffer_setup (false);
-
-  if (!strcmp (command, "status();")) {
-    if (Display.status)
-      Display.error = strdup (Display.status);
+  
+  if (!strcmp (command, "status();"))
     return;
-  }
   
   // Temporarily redirect stderr to catch errors
   int bak = -1;
@@ -309,9 +306,10 @@ static int display_send (const char * command, int fd)
   }
 
   debug ("sending '%s' to %d\n", command, fd);
-  
+
+  const char * msg = !strcmp (command, "status();") ? Display.status : Display.error;
   unsigned int commandlen = strlen (command);
-  unsigned int errorlen = Display.error ? strlen (Display.error) : 0;
+  unsigned int msglen = msg ? strlen (msg) : 0;
   
   int paddedlen = 4*ceil(commandlen/4.);
   size_t len = 2*sizeof(unsigned int) + paddedlen;
@@ -330,7 +328,7 @@ static int display_send (const char * command, int fd)
 #endif
   
   if (gtype < 0)
-    len += errorlen;
+    len += msglen;
   else
     len += 2*sizeof(int) +
       4*sizeof (unsigned int) + glens[0] + glens[1] + glens[2] + glens[3];
@@ -338,7 +336,7 @@ static int display_send (const char * command, int fd)
   if (pid() == 0) {
     if (ws_sendframe_init (fd, len, false, WS_FR_OP_BIN) < 0 ||
 	ws_send (fd, &commandlen, sizeof(unsigned int)) < sizeof(unsigned int) ||
-	ws_send (fd, &errorlen, sizeof(unsigned int)) < sizeof(unsigned int) ||
+	ws_send (fd, &msglen, sizeof(unsigned int)) < sizeof(unsigned int) ||
 	ws_send (fd, command, commandlen) < commandlen)
       status = -1;
     
@@ -352,12 +350,8 @@ static int display_send (const char * command, int fd)
 
   if (gtype < 0) {
     if (pid() == 0 && status >= 0 &&
-	ws_send (fd, Display.error, errorlen) < errorlen)
+	ws_send (fd, msg, msglen) < msglen)
       status = -1;
-    if (!strcmp (command, "status();")) {
-      free (Display.error);
-      Display.error = NULL;
-    }
   }
   else {
     if (pid() == 0 && status >= 0 &&

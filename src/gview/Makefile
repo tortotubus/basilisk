@@ -52,6 +52,7 @@ EMCC_FLAGS = \
 	-s ALLOW_MEMORY_GROWTH=1 \
 	-s MAX_WEBGL_VERSION=2 \
 	-sMINIFY_HTML=0 \
+	-sEXIT_RUNTIME=1 \
 	-sEXPORTED_RUNTIME_METHODS=ccall \
 	--preload-file /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf@/fonts/DejaVuSans.ttf
 
