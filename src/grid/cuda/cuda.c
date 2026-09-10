@@ -289,7 +289,11 @@ bool gpu_init_context (GPUData ** data)
   if (!initialized) {
     CUDA_CHECK (cuInit (0));
     CUDA_CHECK (cuDeviceGet (&dev, 0));
+#if CUDA_VERSION >= 13000
+    CUDA_CHECK (cuCtxCreate (&ctx, NULL, 0, dev));
+#else
     CUDA_CHECK (cuCtxCreate (&ctx, 0, dev));
+#endif
   }
   *data = NULL;
   return !initialized;
