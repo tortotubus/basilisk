@@ -966,13 +966,21 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
     else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_x")) {
       char s[20] = "-1";
       if (Period.x)
+#if _OPENCL
+        snprintf (s, 19, "(int)(N*%d)", Dimensions.x);
+#else
         snprintf (s, 19, "int(N*%d)", Dimensions.x);
+#endif
       fs = str_append (fs, "const int bc_period_x = ", s, ";\n");
     }
     else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_y")) {
       char s[20] = "-1";
       if (Period.y)
+#if _OPENCL
+        snprintf (s, 19, "(int)(N*%d)", Dimensions.y);
+#else
         snprintf (s, 19, "int(N*%d)", Dimensions.y);
+#endif
       fs = str_append (fs, "const int bc_period_y = ", s, ";\n");
     }
     else if (GPUContext.fragment_shader && (region->n.x > 1 || region->n.y > 1) &&
