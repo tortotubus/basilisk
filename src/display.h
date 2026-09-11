@@ -68,11 +68,11 @@ but be careful that this will work only if this call happens *after*
 the default displays are set, typically in each solver `defaults`
 event.
 
-You can also use the 'load()' command to use a saved .gv file, for example:
+You can also directly specify a ".gv" file containing display commands:
 
 ~~~literatec
 event init (i = 0) {
-  display ("load ('myview.gv');", true);
+  display ("myview.gv", true);
   ...
 }
 ~~~

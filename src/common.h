@@ -523,15 +523,40 @@ static void free_display_defaults() {
   free (display_defaults);
 }
 
-void display (const char * commands, bool overwrite = false)
+void display (char * commands, bool overwrite = false)
 {
   if (display_defaults == NULL)
     free_solver_func_add (free_display_defaults);
+  bool free_commands = false;
+  if (!strcmp (commands + strlen(commands) - 3, ".gv")) {
+    FILE * fp = fopen (commands, "r");
+    if (!fp) {
+      perror (commands);
+      exit (1);
+    }
+    fseek (fp, 0, SEEK_END);
+    long size = ftell (fp);
+    rewind (fp);
+    commands = malloc (size + 1);
+    if (!commands) {
+      fclose (fp);
+      fprintf (stderr, "%s:%d: could not allocate %ld bytes\n", __FILE__, LINENO, size + 1);
+      exit (1);
+    }
+    if (fread (commands, 1, size, fp) != (size_t) size) {
+      fprintf (stderr, "%s:%d: could not read %ld bytes\n", __FILE__, LINENO, size);
+      free (commands);
+      fclose (fp);
+      exit (1);
+    }
+    commands[size] = '\0';
+    fclose (fp);
+    free_commands = true;
+  }
   if (overwrite) {
     free (display_defaults);
     display_defaults = malloc (strlen(commands) + 2);
     strcpy (display_defaults, "@");
-    strcat (display_defaults, commands);
   }
   else {
     if (!display_defaults)
@@ -539,8 +564,10 @@ void display (const char * commands, bool overwrite = false)
     display_defaults =
       realloc (display_defaults,
 	       strlen(display_defaults) + strlen(commands) + 1);
-    strcat (display_defaults, commands);
   }
+  strcat (display_defaults, commands);
+  if (free_commands)
+    free (commands);
 }
 
 #define display_control(val, ...)
