@@ -634,4 +634,19 @@ ocl-tests: gpu.ocl.tst gpu-reduce.ocl.tst restriction1.ocl.tst gpu-boundary.ocl.
 	 layers.ocl.tst bump2D-gpu.ocl.tst advection.ocl.tst reversed.ocl.tst
 ocl-tests: CFLAGS += -DPRINTNSHADERS
 
+# GPU 3D tests (GLSL/OpenGL)
+gpu3D-tests: gpu.gpu3D.tst gpu-reduce.gpu3D.tst restriction1.gpu3D.tst gpu-boundary.gpu3D.tst \
+	periodic.gpu3D.tst poisson.gpu3D.tst
+gpu3D-tests: CFLAGS += -DPRINTNSHADERS
+
+# GPU 3D tests (CUDA)
+cuda3D-tests: gpu.cuda3D.tst gpu-reduce.cuda3D.tst restriction1.cuda3D.tst gpu-boundary.cuda3D.tst \
+       	periodic.cuda3D.tst poisson.cuda3D.tst
+cuda3D-tests: CFLAGS += -DPRINTNSHADERS
+
+# GPU 3D tests (OpenCL)
+ocl3D-tests: gpu.ocl3D.tst gpu-reduce.ocl3D.tst restriction1.ocl3D.tst gpu-boundary.ocl3D.tst \
+	periodic.ocl3D.tst poisson.ocl3D.tst
+ocl3D-tests: CFLAGS += -DPRINTNSHADERS
+
 include ../Makefile.defs

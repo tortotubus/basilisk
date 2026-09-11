@@ -89,7 +89,7 @@ macro2 foreach_point_stencil (double _xp, double _yp, double _zp,
 {
   foreach_stencil_generic (flags, reductions, _parallel, _externals, _kernel) {
     _region.p = (coord){ _xp, _yp, _zp };
-    _region.n = (coord){ 1, 1 };
+    _region.n = (coord){ 1, 1, 1 };
     {...}
   }
 }
