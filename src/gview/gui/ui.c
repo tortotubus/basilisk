@@ -42,15 +42,17 @@ static struct {
   int connected; // -1: waiting  0: disconnected  1: connected
   int dimension;
   char host[80], * status;
+  int port;
 } UIState = {
   .draw_window_width = 440,
-  .host = "127.0.0.1:7100",
+  .host = "localhost", .port = 7100,
   .dimension = 2
 };
 
 void ui_set_host (const char * host, int port)
 {
-  snprintf (UIState.host, 79, "%s:%d", host, port);
+  strncpy (UIState.host, host, 79);
+  UIState.port = port;
 }
 
 void ui_set_status (const char * status)
@@ -488,13 +490,7 @@ static bool ui_draw_menu (void)
 static void ui_connect()
 {
   assert (!UIState.connected);
-  char * s = strchr (UIState.host, ':');
-  if (s) {
-    *s = '\0';
-    int port = atoi (s + 1);
-    display_connect (UIState.host, port);
-    *s = ':';
-  }
+  display_connect (UIState.host, UIState.port);
 }
 
 /**
@@ -566,7 +562,7 @@ static bool ui_draw_list (int width, int height)
     /**
     Connection */
 
-    if (strcmp (UIState.host, "local:0")) {
+    if (strcmp (UIState.host, "local") || UIState.port != 0) {
       if (UIState.connected) {
         if (IgButton ("Disconnect"))
           display_disconnect();
@@ -581,10 +577,28 @@ static bool ui_draw_list (int width, int height)
         IgPushStyleColor (ImGuiCol_Text, IM_COL32(255,0,0,255)); // Red
       }
       IgSameLine();
-      IgInputText ("##Host", UIState.host, sizeof(UIState.host),
-                   UIState.connected ? ImGuiInputTextFlags_ReadOnly : 0);
-      if (IgIsItemDeactivatedAfterEdit())
-        ui_connect();
+
+#ifdef __EMSCRIPTEN__
+      int host_flags = ImGuiInputTextFlags_ReadOnly; // hostname is not editable in browser mode
+#else
+      int host_flags = UIState.connected ? ImGuiInputTextFlags_ReadOnly : 0;
+#endif
+      int port_flags = UIState.connected ? ImGuiInputTextFlags_ReadOnly : 0;
+
+      float host_width = IgCalcTextSizeEx (UIState.host, NULL, false, -1.0f).x +
+        2.f*IgGetStyle()->FramePadding.x + 4.f;
+
+      if (host_width < 80.f)
+        host_width = 80.f;
+      
+      IgSetNextItemWidth (host_width);
+      IgInputText ("##host", UIState.host, sizeof(UIState.host), host_flags);
+      
+      IgSameLine();
+      IgSetNextItemWidth (50.f);
+      IgInputScalarEx ("##port", ImGuiDataType_S32, &UIState.port,
+                       NULL, NULL, "%d", port_flags);
+      
       IgPopStyleColor();
     }
 

@@ -47,7 +47,7 @@ int main (int argc, char * argv[])
     else if (porti < 0)
       porti = i;
     else {
-      fprintf (stderr, "usage: %s [OPTIONS] [HOST] [PORT]\n", argv[0]);
+      usage (argv[0]);
       return 1;
     }
   }
