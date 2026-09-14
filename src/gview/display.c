@@ -771,6 +771,39 @@ static void show_item_list()
   debug ("--------------------------\n");
 }
 
+static void add_unique_item (DisplayItem * item, struct transfer *transfer)
+{
+  DisplayItem * identical = NULL;
+  foreach_item (i)
+    if (i != item && i->visible && !strcmp (i->command, item->command)) {
+      identical = i;
+      break;
+    }
+  if (identical) {
+    debug ("item %p is identical to %p %s\n", item, identical, identical->command);
+    item->dimension = identical->dimension;
+    item->type = identical->type;
+    if (!item->vbo[0])
+      glGenBuffers (4, item->vbo);
+    for (int i = 0; i < 4; i++) {
+      glBindBuffer (GL_COPY_WRITE_BUFFER, item->vbo[i]);
+      glBufferData (GL_COPY_WRITE_BUFFER, identical->len[i], NULL, GL_DYNAMIC_DRAW);
+      glBindBuffer (GL_COPY_READ_BUFFER, identical->vbo[i]);
+      glCopyBufferSubData (GL_COPY_READ_BUFFER,
+                           GL_COPY_WRITE_BUFFER,
+                           0, 0, identical->len[i]);
+      item->len[i] = identical->len[i];
+    }
+#if UI
+    ui_copy_error (item->id, identical->id);
+#endif
+  }
+  else { 
+    debug ("adding item %d:'%s'\n", item->id, item->command);
+    send_item (item->command, transfer, '+');
+  }
+}
+
 static DisplayItem * add_item (const char * command, struct transfer *transfer)
 {
   DisplayItem * item = calloc (1, sizeof (DisplayItem));
@@ -784,30 +817,37 @@ static DisplayItem * add_item (const char * command, struct transfer *transfer)
   Display.items[len] = item;
   item->id = len;
   Display.items[len + 1] = NULL;
-  
-  debug ("adding item %d:'%s'\n", item->id, item->command);
-  
-  send_item (item->command, transfer, '+');
+
+  add_unique_item (item, transfer);
   
   show_item_list();
   return item;
 }
 
-static void remove_item (DisplayItem * item, struct transfer *transfer)
+static int remove_unique_item (DisplayItem * item, struct transfer *transfer)
 {
-  debug ("removing item '%s'\n", item->command);
-  
-  if (transfer)
-    send_item (item->command, transfer, '-');
-
-  int len = 0, found = -1;
+  int len = 0, found = -1, unique = 1;
   foreach_item (i) {
     if (i == item)
       found = len;
+    else if (i->visible && !strcmp (i->command, item->command))
+      unique = 0;
     len++;
   }
   assert (found >= 0);
-  
+
+  if (transfer && unique)
+    send_item (item->command, transfer, '-');
+
+  return found;
+}
+
+static void remove_item (DisplayItem * item, struct transfer *transfer)
+{
+  debug ("removing item '%s'\n", item->command);
+
+  int found = remove_unique_item (item, transfer);
+  int len = 0; foreach_item (i) len++;
   for (int i = found; i < len; i++) {
     Display.items[i] = Display.items[i+1];
     if (Display.items[i])
@@ -837,10 +877,11 @@ void display_remove_item (unsigned int id)
 void display_update_item (unsigned int id, const char * command)
 {
   DisplayItem * item = Display.items[id];
-  send_item (item->command, Display.transfer, '-');
+  debug ("updating %d %s %s\n", id, item->command, command);
+  remove_unique_item (item, Display.transfer);
   free (item->command);
   item->command = strdup (command);
-  send_item (item->command, Display.transfer, '+');
+  add_unique_item (item, Display.transfer);
 }
 
 void display_item_visible (unsigned int id, bool visible)
@@ -849,12 +890,12 @@ void display_item_visible (unsigned int id, bool visible)
   if (item->visible) {
     assert (!visible);
     debug ("item '%s' is not visible\n", item->command);
-    send_item (item->command, Display.transfer, '-');
+    remove_unique_item (item, Display.transfer);
   }
   else {
     assert (visible);
     debug ("item '%s' is visible\n", item->command);
-    send_item (item->command, Display.transfer, '+');
+    add_unique_item (item, Display.transfer);
   }
   item->visible = visible;
 }
@@ -864,16 +905,18 @@ static void update_item (const char * command,
                          int dimension,
                          int type,
                          unsigned int len[4],
-                         char * data)
+                         char * buffer)
 {
   glBindVertexArray (vao);
   
   foreach_item (item) {
-    if (!strcmp (item->command, command)) {
+    if (item->visible && !strcmp (item->command, command)) {
+      debug ("%s %p\n", item->command, item);
       item->dimension = dimension;
       item->type = type;
       if (!item->vbo[0])
         glGenBuffers (4, item->vbo);
+      char * data = buffer;
       for (int i = 0; i < 3; i++) {
         glBindBuffer (GL_ARRAY_BUFFER, item->vbo[i]);
         glBufferData (GL_ARRAY_BUFFER, len[i], data, GL_DYNAMIC_DRAW);
@@ -1151,11 +1194,18 @@ static int poll_messages (struct transfer *transfer)
       char error[errorlen + 1]; READ_DATA(error, errorlen);
       error[errorlen] = '\0';
       debug ("    error: %s\n", error);
-#if UI
       foreach_item (item)
-        if (!strcmp (item->command, command))
+        if (!strcmp (item->command, command)) {
+#if UI
           ui_set_error (item->id, error);
-#else
+#endif
+          if (item->vbo[0]) {
+            glDeleteBuffers (4, item->vbo);
+            for (int i = 0; i < 4; i++)
+              item->vbo[i] = 0;
+          }
+        }
+#if !UI
       fprintf (stderr, "%s\nerror: %s\n", command, error);
 #endif
     }
@@ -1222,7 +1272,7 @@ static int poll_messages (struct transfer *transfer)
 
       foreach_item (item)
         if (item->visible)
-          send_item (item->command, transfer, '+');
+          add_unique_item (item, transfer);
 
       /**
       We also ask for status updates. */

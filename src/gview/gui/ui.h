@@ -15,6 +15,7 @@ void ui_set_connected (int connected);
 void ui_set_dimension (int dim);
 void ui_set_host (const char * host, int port);
 void ui_set_error (int id, const char * error);
+void ui_copy_error (int id, int src);
 void ui_set_status (const char * status);
   
 void ui_add_control (DisplayControlStrings control);

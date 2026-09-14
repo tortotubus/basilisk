@@ -289,6 +289,12 @@ void ui_set_error (int id, const char * error)
     draw_list.items[id + 1]->error = NULL;
 }
 
+void ui_copy_error (int id, int src)
+{
+  assert (src <= draw_list.nitems);
+  ui_set_error (id, draw_list.items[src + 1]->error);
+}
+
 static void free_item (UIDrawItem *item)
 {
   display_remove_item (item->id);
@@ -715,6 +721,10 @@ static bool ui_draw_list (int width, int height)
         if (IgCheckbox ("##visible", &item->visible)) {
           display_item_visible (item->id, item->visible);
           changed = true;
+          if (item->visible)
+            selected_draw_item = item;
+          else if (selected_draw_item == item)
+            selected_draw_item = NULL;
         }
         IgEndDisabled();
         
