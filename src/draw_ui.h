@@ -36,9 +36,11 @@ static bool view_properties (UIDrawItem *item)
   IgInputFloat ("tz", &Camera.tz);
   if (IgIsItemDeactivatedAfterEdit())
     changed = true;
+  IgBeginDisabled (true);
   IgInputFloat4 ("quat", Camera.rotation);
   if (IgIsItemDeactivatedAfterEdit())
     changed = true;
+  IgEndDisabled();
   IgInputInt ("width", &ui->width);
   if (IgIsItemDeactivatedAfterEdit()) {
     ui_set_window_size (UIState.window, ui->width, ui->height);

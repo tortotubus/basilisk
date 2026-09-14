@@ -504,6 +504,13 @@ void display_reset_view()
   Camera.rotating = false;
   Camera.panning = false;
   Camera.zooming = false;
+
+  if (Camera.bg[3] == 0) {
+    if (Display.dimension <= 2)
+      Camera.bg[0] = 1, Camera.bg[1] = 1, Camera.bg[2] = 1, Camera.bg[3] = 1;
+    else
+      Camera.bg[0] = 0.3, Camera.bg[1] = 0.4, Camera.bg[2] = 0.6, Camera.bg[3] = 1;
+  }
 }
 
 static void display_gl_init (void)
@@ -556,8 +563,6 @@ static void display_gl_init (void)
 #ifndef __EMSCRIPTEN__
   glEnable (GL_MULTISAMPLE);
 #endif
-
-  display_reset_view();
 }
 
 /**
@@ -636,13 +641,7 @@ static void display_render (GLFWwindow *window)
                       Camera.near, Camera.far);
   
   display_modelview (modelview);
-
-  if (Camera.bg[3] == 0) {
-    if (Display.dimension == 2)
-      Camera.bg[0] = 1, Camera.bg[1] = 1, Camera.bg[2] = 1, Camera.bg[3] = 1;
-    else
-      Camera.bg[0] = 0.3, Camera.bg[1] = 0.4, Camera.bg[2] = 0.6, Camera.bg[3] = 1;
-  }
+  
   glClearColor (Camera.bg[0], Camera.bg[1], Camera.bg[2], Camera.bg[3]);
   glClear (GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -742,7 +741,7 @@ static void display_render (GLFWwindow *window)
 
   if (dimension && dimension != Display.dimension) {
     debug ("dimension: %d %d\n", dimension, Display.dimension);
-    bool reset_view = (Display.dimension > dimension);
+    bool reset_view = (Display.dimension != dimension);
     Display.dimension = dimension;
 #if UI
     ui_set_dimension (dimension);

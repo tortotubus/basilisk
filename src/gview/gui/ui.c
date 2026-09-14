@@ -506,6 +506,8 @@ static bool ui_draw_properties (void)
 {
   if (!properties_open || !selected_draw_item)
     return false;
+
+  IgBeginDisabled (UIState.connected != 1);
   
   bool changed = false;
 
@@ -528,6 +530,8 @@ static bool ui_draw_properties (void)
   }
 
   IgEndChild ();
+
+  IgEndDisabled();
 
   return changed;
 }
