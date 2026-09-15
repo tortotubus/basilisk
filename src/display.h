@@ -79,7 +79,7 @@ event init (i = 0) {
 */
 
 #ifndef DISPLAY_JS
-# define DISPLAY_JS "http://basilisk.ida.upmc.fr/three.js/editor/index.html"
+# define DISPLAY_JS "https://basilisk.fr/gview"
 # pragma autolink -L$BASILISK/wsServer -lws
 #endif
 
@@ -387,7 +387,7 @@ static void display_add (const char * command, int fd)
   }
   DisplayClient * clients = kh_value (Display.objects, k), * client = clients;
   int len = 0;
-  while (client->fd >= 0) {
+  while (client->fd >= 0 && fd >= 0) {
     if (client->fd == fd)
       fd = -1;
     client++, len++;
@@ -777,8 +777,7 @@ void display_url (FILE * fp)
 	     "src/display.h:%d: warning: gethostbyname(\"%s\") returned NULL\n",
 	     LINENO, hostname);
   if (strcmp (DISPLAY_JS, ""))
-    fprintf (fp, DISPLAY_JS "?ws://%s:%d", h ? h->h_name : "127.0.0.1",
-             Display.port);
+    fprintf (fp, DISPLAY_JS "?%s%%20%d", /*h ? h->h_name :*/ "localhost", Display.port);
 }
 
 int display_usage = 20; // use 20% of runtime, maximum
@@ -807,8 +806,8 @@ static void display_terminate()
   }
   array_free (Display.controls);
 
-  free (Display.error);
-  free (Display.status);
+  sysfree (Display.error);
+  sysfree (Display.status);
   
   if (pid() == 0) {
     remove ("display.html");

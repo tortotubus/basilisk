@@ -46,5 +46,5 @@ int main (int argc, char * argv[])
     if (display_poll (-1))
       display_update (INT_MAX);
   }
-  display_destroy();
+  display_terminate();
 }

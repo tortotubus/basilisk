@@ -504,13 +504,6 @@ void display_reset_view()
   Camera.rotating = false;
   Camera.panning = false;
   Camera.zooming = false;
-
-  if (Camera.bg[3] == 0) {
-    if (Display.dimension <= 2)
-      Camera.bg[0] = 1, Camera.bg[1] = 1, Camera.bg[2] = 1, Camera.bg[3] = 1;
-    else
-      Camera.bg[0] = 0.3, Camera.bg[1] = 0.4, Camera.bg[2] = 0.6, Camera.bg[3] = 1;
-  }
 }
 
 static void display_gl_init (void)
@@ -741,13 +734,30 @@ static void display_render (GLFWwindow *window)
 
   if (dimension && dimension != Display.dimension) {
     debug ("dimension: %d %d\n", dimension, Display.dimension);
-    bool reset_view = (Display.dimension != dimension);
+    if (Camera.bg[3] == 0) {
+      if (dimension <= 2)
+        Camera.bg[0] = 1, Camera.bg[1] = 1, Camera.bg[2] = 1, Camera.bg[3] = 1;
+      else
+        Camera.bg[0] = 0.3, Camera.bg[1] = 0.4, Camera.bg[2] = 0.6, Camera.bg[3] = 1;
+    }
+    if (Display.dimension > 0)
+      display_reset_view();
+    else if (Camera.rotation[3] == 0.f) {
+      if (Camera.tz == 0)
+        Camera.tz = -3.f;
+      Camera.sx = Camera.sy = Camera.sz = 1.f;
+      Camera.rotation[3] = 1.f;
+      Camera.fov = 24.f;
+      Camera.near = 0.01f;
+      Camera.far = 100.f;
+      Camera.rotating = false;
+      Camera.panning = false;
+      Camera.zooming = false;
+    }
     Display.dimension = dimension;
 #if UI
     ui_set_dimension (dimension);
 #endif
-    if (reset_view)
-      display_reset_view();
   }
 }
 
