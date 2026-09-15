@@ -62,30 +62,6 @@ clean:
 %.ocl.s.d: CFLAGS += -grid=opencl/multigrid
 %.ocl.tst: CFLAGS += -grid=opencl/multigrid
 
-%.gpu3D.c: %.c
-	ln -s -f $< $@
-%.gpu3D.s: CFLAGS += -grid=gpu/multigrid3D
-%.gpu3D.s.d: CFLAGS += -grid=gpu/multigrid3D
-%.gpu3D.tst: CFLAGS += -grid=gpu/multigrid3D
-
-%.cuda3D.c: %.c
-	ln -s -f $< $@
-%.cuda3D.s: CFLAGS += -grid=cuda/multigrid3D
-%.cuda3D.s.d: CFLAGS += -grid=cuda/multigrid3D
-%.cuda3D.tst: CFLAGS += -grid=cuda/multigrid3D
-
-%.hip3D.c: %.c
-	ln -s -f $< $@
-%.hip3D.s: CFLAGS += -grid=hip/multigrid3D
-%.hip3D.s.d: CFLAGS += -grid=hip/multigrid3D
-%.hip3D.tst: CFLAGS += -grid=hip/multigrid3D
-
-%.ocl3D.c: %.c
-	ln -s -f $< $@
-%.ocl3D.s: CFLAGS += -grid=opencl/multigrid3D
-%.ocl3D.s.d: CFLAGS += -grid=opencl/multigrid3D
-%.ocl3D.tst: CFLAGS += -grid=opencl/multigrid3D
-
 %.CADNA.c: %.c
 	ln -s -f $< $@
 

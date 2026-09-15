@@ -26,8 +26,9 @@ graphics cards and some high-end "professional" Nvidia cards).
 
 Note that this is not the only option to run on GPUs and/or other
 accelerators: there are also Basilisk backends which support
-[CUDA](/src/grid/cuda/cuda.c), [HIP](/src/grid/hip/hip.c) and
-[OpenCL](/src/grid/opencl/opencl.c).
+[CUDA](/src/grid/cuda/cuda.c), [HIP](/src/grid/hip/hip.c),
+[OpenCL](/src/grid/opencl/opencl.c) and, on macOS,
+[Metal](/src/grid/metal/metal.c).
 
 ## Running on GPUs
 
@@ -376,6 +377,7 @@ nsys-ui report*.nsys-rep
 * [An experimental CUDA driver](/src/grid/cuda/cuda.c)
 * [An experimental HIP driver](/src/grid/hip/hip.c)
 * [An experimental OpenCL driver](/src/grid/opencl/opencl.c)
+* [An experimental Metal driver (macOS)](/src/grid/metal/metal.c)
 
 # Implementation */
 
@@ -387,7 +389,45 @@ GPUContext_t GPUContext = {
   .current_shader = -1,
 };
 
-#if _OPENCL
+#if _METAL
+
+/**
+The [Metal Shading Language](/src/grid/metal/metal.c) is a dialect of
+C++14 and is thus close to CUDA, with two important differences:
+pointers cannot be stored in `constant` buffers (so the field data are
+passed as a separate kernel argument, like in OpenCL) and variables
+declared at program scope must reside in the `constant` address space
+(this is what the `_CONST_` macro is for). */
+
+# define TYPEDEF(NAME, BODY) "struct " NAME " " BODY ";\n"
+# define CAST(NAME, BODY) NAME "{" BODY "}\n"
+# define _GLOB_PARAMS0 "device real * _data, constant struct _Ctx_ * _ctx_"
+# define DEFINITIONS                       \
+  "#include <metal_stdlib>\n"              \
+  "using namespace metal;\n"               \
+  "#pragma clang diagnostic ignored \"-Wunused-variable\"\n"           \
+  "#pragma clang diagnostic ignored \"-Wunused-function\"\n"           \
+  "#pragma clang diagnostic ignored \"-Wsign-compare\"\n"               \
+  "#define _CONST_ constant\n"             \
+  "#define tensor _bsk_tensor\n" /* 'tensor' clashes with metal::tensor */ \
+  TYPEDEF("ivec2", "{ int x, y; }")        \
+  TYPEDEF("vec2", "{ float x, y; }")       \
+  TYPEDEF("vec3", "{ float x, y, z; }")    \
+  TYPEDEF("vec4", "{ float r, g, b, a; }") \
+  "#define forin(type,s,list) for (int _i = 0; _i < int(sizeof(list)/sizeof(type)) - 1; _i++) { type s = list[_i];\n" \
+  "#define forin2(a,b,c,d) for (int _i = 0; _i < int(sizeof(c)/sizeof(a)) - 1; _i++)" \
+  "  { a = c[_i]; b = d[_i];\n"                                         \
+  "#define forin3(a,b,e,c,d,f) for (int _i = 0; _i < int(sizeof(c)/sizeof(a)) - 1; _i++)" \
+  "  { a = c[_i]; b = d[_i]; e = f[_i];\n"                              \
+  "#define layout(x)\n"                                                 \
+  "#define _GLOB0_ _data, _ctx_\n"                                      \
+  "#define _GLOB_ _data, _ctx_,\n"                                      \
+  "#define _GLOB_PARAMS0_ " _GLOB_PARAMS0 "\n"                          \
+  "#define _GLOB_PARAMS_ " _GLOB_PARAMS0 ",\n"                          \
+  "#define _GLOB_VAL_(x) (_ctx_->x)\n"                                  \
+  "#define _LOC_VAL_(x) (_local_.x)\n"                                  \
+  "#define __global\n"
+#elif _OPENCL
 # define TYPEDEF(NAME, BODY) "typedef struct " BODY " " NAME ";\n"
 # define CAST(NAME, BODY) "(" NAME "){" BODY "}\n"
 # define _GLOB_PARAMS0 "__global real * _data, __constant struct _Ctx_ *_ctx_"
@@ -408,7 +448,8 @@ GPUContext_t GPUContext = {
   "#define _GLOB_PARAMS0_ " _GLOB_PARAMS0 "\n"                          \
   "#define _GLOB_PARAMS_ " _GLOB_PARAMS0 ",\n"                          \
   "#define _GLOB_VAL_(x) (_ctx_->x)\n"            \
-  "#define _LOC_VAL_(x) (_local_.x)\n"
+  "#define _LOC_VAL_(x) (_local_.x)\n"                 \
+  "#define _CONST_ const\n"
 #elif _CUDA
 # define TYPEDEF(NAME, BODY) "struct " NAME " " BODY ";\n"
 # define CAST(NAME, BODY) NAME "{" BODY "}\n"
@@ -433,6 +474,7 @@ GPUContext_t GPUContext = {
   "#define _GLOB_VAL_(x) (_ctx_->x)\n"                                  \
   "#define _LOC_VAL_(x) (_local_.x)\n"                                  \
   "#define __global\n"                                                  \
+  "#define _CONST_ const\n"                                            \
   "#define fabs(x) abs(x)\n"
 #else // GLSL
 # define TYPEDEF(NAME, BODY) "struct " NAME " " BODY ";\n"
@@ -449,6 +491,7 @@ GPUContext_t GPUContext = {
   "#define _GLOB_PARAMS_\n"                                             \
   "#define _GLOB_VAL_(x) x\n"                                           \
   "#define _LOC_VAL_(x) (x)\n"                                          \
+  "#define _CONST_ const\n"                                            \
   "#define fabs(x) abs(x)\n"
 #endif // GLSL
 
@@ -557,28 +600,14 @@ const char glsl_preproc[] =
   "#define NOT_UNUSED(x)\n"
   "#define pi 3.14159265359f\n"
   "#define nodata (1e30f)\n"
-  GPU_UNUSED_COORDS
-  "const int ig = 0, jg = 0, kg = 0;\n"
-  GPU_UNIFORM_DECLS
+  "const real z = 0.;\n"
+  "const int ig = 0, jg = 0;\n"
+#if !_CUDA  
+  "layout (location = 0) uniform ivec2 csOrigin = {0,0};\n"
+  "layout (location = 1) uniform vec2 vsOrigin = {0.f,0.f};\n"
+  "layout (location = 2) uniform vec2 vsScale = {1.f,1.f};\n"
+#endif // !_CUDA
   ;
-
-#undef GPU_REAL_TYPE
-#undef GPU_COORD2_TYPE
-#undef GPU_COORD3_TYPE
-#undef GPU_MATH_DECLS
-#undef GPU_IVEC_TYPE
-#undef GPU_DIM_COORD_TYPE
-#undef GPU_VECTOR_BODY
-#undef GPU_TENSOR_BODY
-#undef GPU_POINT_INDICES
-#undef GPU_NEIGHBOR_INDICES
-#undef GPU_ORIGIN_INIT
-#undef GPU_UNUSED_COORDS
-#undef GPU_POINT_LAYER
-#undef GPU_INDEX_DECL
-#undef GPU_TYPE_DECLS
-#undef GPU_NEIGHBOR_DECL
-#undef GPU_UNIFORM_DECLS
 
 static inline int list_size (const External * i)
 {
@@ -1025,8 +1054,15 @@ char * external_declaration (char * fs, const External * g)
 
 static
 char * external_write (char * fs, const External * g, const ForeachData * loop,
-                       const RegionParameters * region, const unsigned nwg[dimension])
+                       const RegionParameters * region, const unsigned nwg[2])
 {
+
+  /**
+  Variables declared within the body of the kernel cannot use the
+  `constant` address space of Metal (see `_CONST_` in
+  [DEFINITIONS](#definitions)). */
+
+  const char * _const_ = local ? "const " : "_CONST_ ";
   if (g->name[0] == '.') {
     if (g->type == sym_function_declaration) {
       bool boundary = is_boundary_attribute (g);
@@ -1067,16 +1103,20 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
     External * f = _get_function ((long) g->pointer);
 #if _HIP_AMD
     fs = str_append (fs, "\n__device__ ", f->data, "\n");
+#elif _METAL
+    char * code = metal_thread_qualifiers (f->data);
+    fs = str_append (fs, "\n", code, "\n");
+    sysfree (code);
 #else
     fs = str_append (fs, "\n", f->data, "\n");
 #endif
     char s[20]; snprintf (s, 19, "%d", f->nd);
-    fs = str_append (fs, "const int _p", g->name, " = ", s, ";\n");
+    fs = str_append (fs, "_CONST_ int _p", g->name, " = ", s, ";\n");
   }
   else if (g->type == sym_function_declaration) {
     External * f = _get_function ((long) g->pointer);
     char s[20]; snprintf (s, 19, "%d", f->nd);
-    fs = str_append (fs, "const int ", g->name, " = ", s, ";\n",
+    fs = str_append (fs, "_CONST_ int ", g->name, " = ", s, ";\n",
                      "#define _f", g->name, "(args) (", f->name, " args)\n");
   }
   else if (g->type != sym_SCALAR &&
@@ -1090,16 +1130,17 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       snprintf (d, 19, "%d", depth());
       snprintf (l, 19, "%d", level);
       fs = str_append (fs,
-                       "const uint N = ", s, ", _depth = ", d, ";\n");
+                       "_CONST_ uint N = ", s, ", _depth = ", d, ";\n");
       if (GPUContext.nssbo <= 1) {
         char size[30];
         snprintf (size, 29, "%ld", (size_t) field_size());	  
         fs = str_append (fs,
-                         "const uint _field_size = ", size, ";\n");
+                         "_CONST_ uint _field_size = ", size, ";\n");
       }
 #ifdef shift_level // multigrid
+      char nd[20]; snprintf (nd, 19, "%d", depth() + 1);
       fs = str_append (fs,
-                       "const uint _shift[_depth + 1] = {");
+                       "_CONST_ uint _shift[", nd, "] = {");
       for (int d = 0; d <= depth(); d++) {
         snprintf (s, 19, "%ld", shift_level(d));
         fs = str_append (fs,  d > 0 ? "," : "", s);
@@ -1110,8 +1151,8 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       snprintf (d, 19, "%d", Dimensions.y);
 #if dimension == 2
       fs = str_append (fs,
-                       "const ivec2 Dimensions = {", s, ",", d, "};\n"
-                       "const uint NY = N*", d,
+                       "_CONST_ ivec2 Dimensions = {", s, ",", d, "};\n"
+                       "_CONST_ uint NY = N*", d,
                        loop->face > 1 || loop->vertex ? "+1" : "", ";\n");
 #elif dimension == 3
       char e[20];
@@ -1167,7 +1208,7 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
 	
       char nl[20];
       snprintf (nl, 19, "%d", *((int *)g->pointer));
-      fs = str_append (fs, "const int nl = ", nl, ";\n");
+      fs = str_append (fs, "_CONST_ int nl = ", nl, ";\n");
     }
     else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_x")) {
       char s[20] = "-1";
@@ -1176,7 +1217,6 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
         snprintf (s, 19, "(int)(N*%d)", Dimensions.x);
 #else
         snprintf (s, 19, "int(N*%d)", Dimensions.x);
-#endif
       fs = str_append (fs, "const int bc_period_x = ", s, ";\n");
     }
     else if (g->type == sym_INT && g->global && !strcmp (g->name, "bc_period_y")) {
@@ -1186,7 +1226,6 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
         snprintf (s, 19, "(int)(N*%d)", Dimensions.y);
 #else
         snprintf (s, 19, "int(N*%d)", Dimensions.y);
-#endif
       fs = str_append (fs, "const int bc_period_y = ", s, ";\n");
     }
 #if dimension == 3
@@ -1224,7 +1263,7 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       default:
         assert (false); // not implemented yet
       }
-      fs = str_append (fs, "const ", type_string (g), " ", EXTERNAL_NAME (g), "=", value, ";\n");
+      fs = str_append (fs, _const_, type_string (g), " ", EXTERNAL_NAME (g), "=", value, ";\n");
     }
     else if (strcmp (g->name, "Dimensions") && g->reduct != '+') {
 #if !_CUDA
@@ -1238,7 +1277,7 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
     int size = list_size (g);
     for (int j = 0; j < size; j++) {
       if (j == 0) {
-        fs = str_append (fs, "const ", type_string (g), " ", EXTERNAL_NAME (g));
+        fs = str_append (fs, _const_, type_string (g), " ", EXTERNAL_NAME (g));
         if (g->nd == 0)
           fs = str_append (fs, " = ");
         else {
@@ -1298,8 +1337,8 @@ char * build_shader (External * externals, const ForeachData * loop,
                           "#version 430\n",
 #endif
                           glsl_preproc,
-			  "const int _nconst = ", s, ";\n"
-			  "const real _constant[_nconst] = {", a);
+			  "_CONST_ int _nconst = ", s, ";\n"
+			  "_CONST_ real _constant[", s, "] = {", a);
   for (int i = 1; i < nconst; i++) {
     snprintf (a, 19, "%g", _constant[i]);
     fs = str_append (fs, ",", a);
@@ -1318,7 +1357,7 @@ char * build_shader (External * externals, const ForeachData * loop,
 		     "].f[(_offset[(field)].j+(index))%", s, "]\n");
   }
   else
-#if _OPENCL
+#if _OPENCL || _METAL
     fs = str_append (fs,
 		     "#define _data_val(field,index) _data[(field)*field_size() + (index)]\n");
 #elif _CUDA
@@ -1356,7 +1395,7 @@ char * build_shader (External * externals, const ForeachData * loop,
 	nindex++;
     assert (nindex > 0);
     char s[20]; snprintf (s, 19, "%d", nindex);
-    fs = str_append (fs, "const _Attributes _attr[", s, "]={");
+    fs = str_append (fs, "_CONST_ _Attributes _attr[", s, "]={");
     nindex = 0;
     for (scalar s in baseblock)
       if (s.gpu.index) {
@@ -1429,7 +1468,7 @@ char * build_shader (External * externals, const ForeachData * loop,
 	  imax = s.i + s.block;
       }
     char string[100]; snprintf (string, 19, "%d", imax);
-    fs = str_append (fs, "const struct { uint i, j; } _offset[", string, "]={");
+    fs = str_append (fs, "_CONST_ struct { uint i, j; } _offset[", string, "]={");
     for (int s = 0; s < imax; s++) {
       fs = str_append (fs, s ? ",{" : "{");
       size_t offset = s*field_size(), size = GPUContext.max_ssbo_size/sizeof(real);
@@ -1449,7 +1488,22 @@ char * build_shader (External * externals, const ForeachData * loop,
   /**
   Global variables */
 
-#if _CUDA
+#if _METAL
+
+  /**
+  Metal does not allow pointers in `constant` buffers: the first field
+  is only a placeholder which matches the layout of the corresponding
+  structure on the host. */
+
+  fs = str_append (fs, "struct _Ctx_ {\n  ulong _data;\n");
+  for (const External * g = externals; g; g = g->next)
+    if (g->global && is_external_variable (g)) {
+      fs = str_append (fs, "  ");
+      fs = external_declaration (fs, g);
+      fs = str_append (fs, ";\n");
+    }
+  fs = str_append (fs, "};\n");
+#elif _CUDA
   fs = str_append (fs, "struct _Ctx_ {\n  __global real * _data;\n");
   for (const External * g = externals; g; g = g->next)
     if (g->global && is_external_variable (g)) {
@@ -1465,7 +1519,7 @@ char * build_shader (External * externals, const ForeachData * loop,
   
   for (External * g = externals; g; g = g->next)    
     if (g->global || !is_normal_variable (g) || is_external_variable (g))
-      fs = external_write (fs, g, loop, region, nwg);
+      fs = external_write (fs, g, loop, region, nwg, false);
       
   return fs;
 }
@@ -1719,6 +1773,23 @@ static char * shader_append_func (char * s, const ForeachData * loop, const Exte
     }
   if (locals)
     s = str_append (s, "struct _Local {\n", locals, "};\n");
+#if _METAL
+
+  /**
+  Metal kernel arguments must be explicitly bound to buffer indices
+  and the position of the thread in the grid is obtained through an
+  attribute qualifier. */
+
+  s = str_append (s,
+                  "kernel\n"
+                  "void ", func, "("
+                  "device real * _data [[buffer(0)]], "
+                  "constant struct _Ctx_ * _ctx_ [[buffer(1)]], "
+                  "constant ivec2 & csOrigin [[buffer(2)]]");
+  if (locals)
+    s = str_append (s, ", constant struct _Local & _local_ [[buffer(3)]]");
+  s = str_append (s, ", uint2 _tpig [[thread_position_in_grid]]){\n");
+#else // !_METAL
   s = str_append (s,
 #if _OPENCL
                   "__kernel\n"
@@ -1730,6 +1801,7 @@ static char * shader_append_func (char * s, const ForeachData * loop, const Exte
   if (locals)
     s = str_append (s, ", const struct _Local _local_");
   s = str_append (s, "){\n");
+#endif // !_METAL
   return s;
 #else // !_CUDA
   return str_append (s, "void main() {\n");
@@ -1859,7 +1931,6 @@ static Shader * compile_shader (ForeachData * loop,
     char d[20];
     snprintf (d, 19, "%d", region->level > 0 ? region->level - 1 : depth());
     shader = str_append (shader,
-#if dimension == 2
 #if _OPENCL
                          "Point point = {csOrigin.x + get_group_id(1)*get_local_size(1) + get_local_id(1) + GHOSTS,"
                          "csOrigin.y + get_group_id(0)*get_local_size(0) + get_local_id(0) + GHOSTS,", d,
@@ -1917,7 +1988,7 @@ static Shader * compile_shader (ForeachData * loop,
 #endif
   for (const External * g = merged; g; g = g->next) {
     if (!(g->global || !is_normal_variable (g) || is_external_variable (g)))
-      shader = external_write (shader, g, loop, region, nwg);    
+      shader = external_write (shader, g, loop, region, nwg, true);    
     if (g->reduct) {
       shader = str_append (shader, type_string (g), " ",
                            g->global == 2 ? "_loc_" : "", g->name, " = ");
@@ -2243,7 +2314,9 @@ bool gpu_end_stencil (ForeachData * loop,
     on_gpu = doloop_on_gpu (loop, region, externals, kernel);
     if (!on_gpu) {
       fprintf (stderr, "%s:%d: %s: foreach() done on CPU (see "
-#if _OPENCL
+#if _METAL
+               "Metal"
+#elif _OPENCL
                "OpenCL"
 #elif _CUDA
                "CUDA"
