@@ -36,11 +36,11 @@ static bool view_properties (UIDrawItem *item)
   IgInputFloat ("tz", &Camera.tz);
   if (IgIsItemDeactivatedAfterEdit())
     changed = true;
-  IgBeginDisabled (true);
-  IgInputFloat4 ("quat", Camera.rotation);
-  if (IgIsItemDeactivatedAfterEdit())
-    changed = true;
-  IgEndDisabled();
+  if (UIState.dimension > 2) {
+    IgBeginDisabled (true);
+    IgInputFloat4 ("quat", Camera.rotation);
+    IgEndDisabled();
+  }
   IgInputInt ("width", &ui->width);
   if (IgIsItemDeactivatedAfterEdit()) {
     ui_set_window_size (UIState.window, ui->width, ui->height);
@@ -891,8 +891,11 @@ static bool squares_properties (UIDrawItem *item)
   if (IgIsItemDeactivatedAfterEdit())
     changed = true;
   IgInputText ("z", ui->z, sizeof(ui->z), 0);
-  if (IgIsItemDeactivatedAfterEdit())
+  if (IgIsItemDeactivatedAfterEdit()) {
     changed = true;
+    ui->linear = true;
+    UIState.dimension = 3;
+  }
   IgInputDouble ("min", &ui->min);
   if (IgIsItemDeactivatedAfterEdit())
     changed = true;
