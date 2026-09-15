@@ -16,6 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef __EMSCRIPTEN__
+# include <emscripten.h>
+#endif
 
 /**
 # Configuration */
@@ -111,13 +114,15 @@ static bool imgui_link (const char *label, const char *url)
   ImDrawList_AddLine (draw_list, p1, p2, color);
 
   if (hovered && IgIsMouseClicked (ImGuiMouseButton_Left)) {
+#ifdef __EMSCRIPTEN__
+    EM_ASM ({ window.open (UTF8ToString ($0), "_blank"); }, url);
+#else
     char command[1024];
 
-    snprintf (command, sizeof command,
-              "xdg-open '%s' &", url);
+    snprintf (command, sizeof command, "xdg-open '%s' &", url);
     if (system (command))
       fprintf (stderr, "%s:%d: %s failed\n", __FILE__, __LINE__, command);
-
+#endif
     return true;
   }
 
@@ -333,8 +338,6 @@ static void ui_delete_draw_item (UIDrawItem * item)
 # Save commands */
 
 #ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-
 static void browser_download (const char *filename, const char *data)
 {
   EM_ASM ({

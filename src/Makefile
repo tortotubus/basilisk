@@ -15,6 +15,8 @@ all: subdirs qcc literatec bview2D bview3D bview2Dm
 	@chmod +x ppm2mpeg ppm2mp4 ppm2ogv ppm2gif runtest page2html
 	@test -f xyz2kdt || ln -s kdt/xyz2kdt
 	@test -f kdtquery || ln -s kdt/kdtquery
+	@test -f gview-gui || ln -s gview/gview gview-gui
+	@test -f gview-nogui || ln -s gview/gview-nogui gview-nogui
 
 subdirs: $(SUBDIRS)
 
