@@ -651,93 +651,16 @@ static const int bc_period_x = -1, bc_period_y = -1;
 static const int bc_period_z = -1;
 #endif
 
-#if dimension == 2
-static void boundary_top (Point point, int i)
-{
-  bool data = false;
-  for (scalar s in apply_bc_list)
-    if (!s.face || s.i != s.v.y.i) {
-      scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.v.y);
-      foreach_blockf(s)
-	s[i,-bc_period_y] = b.boundary_top (neighborp(i), neighborp(i,-bc_period_y), s, &data);
-    }
-}
-
-static void boundary_bottom (Point point, int i)
-{
-  bool data = false;
-  for (scalar s in apply_bc_list)
-    if (!s.face || s.i != s.v.y.i) {
-      scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.v.y);
-      foreach_blockf(s)
-	s[i,bc_period_y] = b.boundary_bottom (neighborp(i), neighborp(i,bc_period_y), s, &data);
-    }
-}
-
-static
-void apply_bc (Point point)
-{
-  bool data = false;
-  // face BCs
-  if (point.i == GHOSTS)
-    for (scalar s in apply_bc_list)
-      if (s.face && s.i == s.v.x.i && s.boundary_left)
-	foreach_blockf(s)
-	  s[] = s.boundary_left (point, neighborp(bc_period_x), s, &data);
-  if (point.i == N*Dimensions.x + GHOSTS)
-    for (scalar s in apply_bc_list)
-      if (s.face && s.i == s.v.x.i && s.boundary_right)
-	foreach_blockf(s)
-	  s[] = s.boundary_right (neighborp(bc_period_x), point, s, &data);
-  if (point.j == GHOSTS)
-    for (scalar s in apply_bc_list)
-      if (s.face && s.i == s.v.y.i) {
-	scalar b = s.v.x;
-	if (b.boundary_bottom)
-	  foreach_blockf(s)
-	    s[] = b.boundary_bottom (point, neighborp(0,bc_period_y), s, &data);
-      }
-  if (point.j == N*Dimensions.y + GHOSTS)
-    for (scalar s in apply_bc_list)
-      if (s.face && s.i == s.v.y.i) {
-	scalar b = s.v.x;
-	if (b.boundary_top)
-	  foreach_blockf(s)
-	    s[] = b.boundary_top (neighborp(0,bc_period_y), point, s, &data);
-      }
-  // centered BCs
-  if (point.i == GHOSTS) { // left
-    for (scalar s in apply_bc_list)
-      if (!s.face || s.i != s.v.x.i)
-	foreach_blockf(s)
-	  s[bc_period_x] = s.boundary_left (point, neighborp(bc_period_x), s, &data);
-    if (point.j == GHOSTS)
-      boundary_bottom (point, bc_period_x); // bottom-left
-    if (point.j == N*Dimensions.y + GHOSTS - 1)
-      boundary_top (point, bc_period_x);    // top-left
-  }
-  if (point.i == N*Dimensions.x + GHOSTS - 1) { // right
-    for (scalar s in apply_bc_list)
-      if (!s.face || s.i != s.v.x.i)
-	foreach_blockf(s)
-	  s[- bc_period_x] = s.boundary_right (point, neighborp(- bc_period_x), s, &data);
-    if (point.j == GHOSTS)
-      boundary_bottom (point, - bc_period_x); // bottom-right
-    if (point.j == N*Dimensions.y + GHOSTS - 1)
-      boundary_top (point, - bc_period_x);    // top-right
-  }
-  if (point.j == GHOSTS)
-    boundary_bottom (point, 0);  // bottom
-  if (point.j == N*Dimensions.y + GHOSTS - 1)
-    boundary_top (point, 0);     // top
-}
-#elif dimension == 3
 static void boundary_top (Point point, int i, int k)
 {
   bool data = false;
   for (scalar s in apply_bc_list)
     if (!s.face || s.i != s.v.y.i) {
+#if dimension == 2
+      scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.v.y);
+#elif dimension == 3
       scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.i == s.v.z.i ? s.v.y : s.v.z);
+#endif
       foreach_blockf(s)
 	s[i,-bc_period_y,k] = b.boundary_top (neighborp(i,0,k), neighborp(i,-bc_period_y,k), s, &data);
     }
@@ -748,12 +671,17 @@ static void boundary_bottom (Point point, int i, int k)
   bool data = false;
   for (scalar s in apply_bc_list)
     if (!s.face || s.i != s.v.y.i) {
+#if dimension == 2
+      scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.v.y);
+#elif dimension == 3
       scalar b = (s.v.x.i < 0 ? s : s.i == s.v.y.i ? s.v.x : s.i == s.v.z.i ? s.v.y : s.v.z);
+#endif
       foreach_blockf(s)
 	s[i,bc_period_y,k] = b.boundary_bottom (neighborp(i,0,k), neighborp(i,bc_period_y,k), s, &data);
     }
 }
 
+#if dimension == 3
 static void boundary_front (Point point, int i, int j)
 {
   bool data = false;
@@ -775,6 +703,7 @@ static void boundary_back (Point point, int i, int j)
 	s[i,j,bc_period_z] = b.boundary_back (neighborp(i,j,0), neighborp(i,j,bc_period_z), s, &data);
     }
 }
+#endif
 
 static
 void apply_bc (Point point)
@@ -807,6 +736,7 @@ void apply_bc (Point point)
 	  foreach_blockf(s)
 	    s[] = b.boundary_top (neighborp(0,bc_period_y,0), point, s, &data);
       }
+#if dimension == 3
   if (point.k == GHOSTS)
     for (scalar s in apply_bc_list)
       if (s.face && s.i == s.v.z.i) {
@@ -823,6 +753,7 @@ void apply_bc (Point point)
 	  foreach_blockf(s)
 	    s[] = b.boundary_front (neighborp(0,0,bc_period_z), point, s, &data);
       }
+#endif
   // centered BCs
   if (point.i == GHOSTS) { // left
     for (scalar s in apply_bc_list)
@@ -831,22 +762,28 @@ void apply_bc (Point point)
 	  s[bc_period_x,0,0] = s.boundary_left (point, neighborp(bc_period_x,0,0), s, &data);
     if (point.j == GHOSTS) {
       boundary_bottom (point, bc_period_x, 0);
+#if dimension == 3
       if (point.k == GHOSTS)
 	boundary_back (point, bc_period_x, bc_period_y);
       if (point.k == N*Dimensions.z + GHOSTS - 1)
 	boundary_front (point, bc_period_x, bc_period_y);
+#endif
     }
     if (point.j == N*Dimensions.y + GHOSTS - 1) {
       boundary_top (point, bc_period_x, 0);
+#if dimension == 3
       if (point.k == GHOSTS)
 	boundary_back (point, bc_period_x, -bc_period_y);
       if (point.k == N*Dimensions.z + GHOSTS - 1)
 	boundary_front (point, bc_period_x, -bc_period_y);
+#endif
     }
+#if dimension == 3
     if (point.k == GHOSTS)
       boundary_back (point, bc_period_x, 0);
     if (point.k == N*Dimensions.z + GHOSTS - 1)
       boundary_front (point, bc_period_x, 0);
+#endif
   }
   if (point.i == N*Dimensions.x + GHOSTS - 1) { // right
     for (scalar s in apply_bc_list)
@@ -855,43 +792,54 @@ void apply_bc (Point point)
 	  s[-bc_period_x,0,0] = s.boundary_right (point, neighborp(-bc_period_x,0,0), s, &data);
     if (point.j == GHOSTS) {
       boundary_bottom (point, -bc_period_x, 0);
+#if dimension == 3
       if (point.k == GHOSTS)
 	boundary_back (point, -bc_period_x, bc_period_y);
       if (point.k == N*Dimensions.z + GHOSTS - 1)
 	boundary_front (point, -bc_period_x, bc_period_y);
+#endif
     }
     if (point.j == N*Dimensions.y + GHOSTS - 1) {
       boundary_top (point, -bc_period_x, 0);
+#if dimension == 3
       if (point.k == GHOSTS)
 	boundary_back (point, -bc_period_x, -bc_period_y);
       if (point.k == N*Dimensions.z + GHOSTS - 1)
 	boundary_front (point, -bc_period_x, -bc_period_y);
+#endif
     }
+#if dimension == 3
     if (point.k == GHOSTS)
       boundary_back (point, -bc_period_x, 0);
     if (point.k == N*Dimensions.z + GHOSTS - 1)
       boundary_front (point, -bc_period_x, 0);
+#endif
   }
   if (point.j == GHOSTS) {
     boundary_bottom (point, 0, 0);
+#if dimension == 3
     if (point.k == GHOSTS)
       boundary_back (point, 0, bc_period_y);
     if (point.k == N*Dimensions.z + GHOSTS - 1)
       boundary_front (point, 0, bc_period_y);
+#endif
   }
   if (point.j == N*Dimensions.y + GHOSTS - 1) {
     boundary_top (point, 0, 0);
+#if dimension == 3
     if (point.k == GHOSTS)
       boundary_back (point, 0, -bc_period_y);
     if (point.k == N*Dimensions.z + GHOSTS - 1)
       boundary_front (point, 0, -bc_period_y);
+#endif
   }
+#if dimension == 3
   if (point.k == GHOSTS)
     boundary_back (point, 0, 0);
   if (point.k == N*Dimensions.z + GHOSTS - 1)
     boundary_front (point, 0, 0);
+#endif
 }
-#endif // dimension
 
 static bool is_boundary_attribute (const External * g)
 {
