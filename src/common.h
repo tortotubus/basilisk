@@ -523,15 +523,18 @@ static void free_display_defaults() {
   free (display_defaults);
 }
 
-void display (char * commands, bool overwrite = false)
+static
+void display_internal (const char * command, bool overwrite)
 {
   if (display_defaults == NULL)
     free_solver_func_add (free_display_defaults);
-  bool free_commands = false;
-  if (!strcmp (commands + strlen(commands) - 3, ".gv")) {
-    FILE * fp = fopen (commands, "r");
+  char * commands;
+  if (strcmp (command + strlen(command) - 3, ".gv"))
+    commands = strdup (command);
+  else {
+    FILE * fp = fopen (command, "r");
     if (!fp) {
-      perror (commands);
+      perror (command);
       exit (1);
     }
     fseek (fp, 0, SEEK_END);
@@ -551,7 +554,6 @@ void display (char * commands, bool overwrite = false)
     }
     commands[size] = '\0';
     fclose (fp);
-    free_commands = true;
   }
   if (overwrite) {
     free (display_defaults);
@@ -565,9 +567,36 @@ void display (char * commands, bool overwrite = false)
       realloc (display_defaults,
 	       strlen(display_defaults) + strlen(commands) + 1);
   }
-  strcat (display_defaults, commands);
-  if (free_commands)
-    free (commands);
+  char * s = commands, * defaults = display_defaults;
+  while (*s != '\0') {
+    while (*s != '\0' && strchr (" \t\n", *s)) s++;
+    char * end = s; while (*end != '\0' && !strchr (";\n", *end)) end++;
+    char c = *end != '\0' ? *(end + 1) : '\0';
+    if (*end == '\n') *end = ' ';
+    if (*end != '\0') *(end + 1) = '\0';
+    if (!strncmp (s, "clear", 5)) {
+      char * s1 = s + 5; while (strchr (" \t", *s1)) s1++;
+      if (!strncmp (s1, "();", 3)) {
+        defaults = display_defaults;
+        strcpy (display_defaults, "@");
+        s += strlen (s); *s = c;
+        continue;
+      }
+    }
+    if (s[0] != '\0' && strncmp (s, "//", 2)) {
+      strcat (defaults, s);
+      defaults += strlen (s);
+    }
+    s += strlen (s); *s = c;
+  }
+  free (commands);
+}
+
+macro display (const char * commands = NULL, bool overwrite = false)
+{
+  if (commands)
+    display_internal (commands, overwrite);
+  display_internal ([...], commands == NULL ? overwrite : false);
 }
 
 #define display_control(val, ...)

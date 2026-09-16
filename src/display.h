@@ -3,7 +3,7 @@
 
 This file implements the server-side of the interactive display of a
 running Basilisk code. The client-side is typically done by the
-[javascript implementation](jview/README).
+[gview](gview/display.c).
 
 This works using two main components:
 
@@ -26,7 +26,7 @@ Multiple servers can run simultaneously on the same machine but must
 use different ports. When connecting, the server looks for a free port
 in the default range (typically 7100 to 7200, see the DISPLAY_RANGE
 macro below). The corresponding connection information (including the
-URL of the [javascript interface](/src/jview/README)) is written in
+URL of the [gview web interface](gview/display.c)) is written in
 the `display.html` file, which can be used to open the connection on
 the client side (i.e. the web browser).
 
@@ -42,26 +42,28 @@ display_control (value, 0, 100, "Short Name", "Long tooltip");
 where the first argument is the name of the variable and the numbers
 indicate the (optional) range (min and max values). The (optional)
 name and tooltip are used to generate the [Basilisk
-View](jview/README) interface. The only compulsory argument is the
-variable name. 
+View](gview/display.c) interface. The only compulsory argument is the
+variable name.
 
 ## Default display
 
 Default [drawing function calls](draw.h), which will be sent to an empty
-[javascript client](jview/README), can be setup using something like:
+[client](gview/display.c), can be setup using something like:
 
 ~~~literatec
-display ("squares (color = 'u.x', spread = -1);");
+display() {
+  squares (color = "u.x", spread = -1);
+}
 ~~~
-
-where the single quotes will be expanded to doubles quotes when
-interpreted. Do not forget the trailing semi-column.
 
 Note that these function calls will be appended to existing ones. To
 overwrite existing calls, use:
 
 ~~~literatec
-display ("squares (color = 'u.x', spread = -1);", true);
+display() {
+  clear();
+  squares (color = "u.x", spread = -1);
+}
 ~~~
 
 but be careful that this will work only if this call happens *after*
@@ -76,7 +78,9 @@ event init (i = 0) {
   ...
 }
 ~~~
-*/
+
+where the second argument (`true` here) indicates whether this should
+overwrite existing commands. */
 
 #ifndef DISPLAY_JS
 # define DISPLAY_JS "https://basilisk.fr/gview"

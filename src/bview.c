@@ -41,7 +41,10 @@ int main (int argc, char * argv[])
   display_url (stderr);
   fputc ('\n', stderr);
 
-  display ("box();");
+  display() {
+    box();
+  }
+  
   while (1) {
     if (display_poll (-1))
       display_update (INT_MAX);
