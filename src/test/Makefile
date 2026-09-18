@@ -1,6 +1,8 @@
 all: check 3D-tests mpi-tests load-balancing curvature-tests	\
 	axi-tests cadna-tests embed-tests multilayer-tests	\
-	multilayer-stratified gotm-tests dimensions-tests gpu-tests
+	multilayer-stratified gotm-tests dimensions-tests       \
+	gpu-tests cuda-tests hip-tests ocl-tests                \
+	gpu3D-tests cuda3D-tests hip3D-tests ocl3D-tests
 
 failed:
 	$(MAKE) -k `find . -name fail | sed -e 's|\./||g' -e 's|/fail|.tst|g'`
@@ -641,8 +643,13 @@ gpu3D-tests: CFLAGS += -DPRINTNSHADERS
 
 # GPU 3D tests (CUDA)
 cuda3D-tests: gpu.cuda3D.tst gpu-reduce.cuda3D.tst restriction1.cuda3D.tst gpu-boundary.cuda3D.tst \
-       	periodic.cuda3D.tst poisson.cuda3D.tst
+	periodic.cuda3D.tst poisson.cuda3D.tst
 cuda3D-tests: CFLAGS += -DPRINTNSHADERS
+
+# GPU 3D tests (HIP)
+hip3D-tests: gpu.hip3D.tst gpu-reduce.hip3D.tst restriction1.hip3D.tst gpu-boundary.hip3D.tst \
+	periodic.hip3D.tst poisson.hip3D.tst
+hip3D-tests: CFLAGS += -DPRINTNSHADERS
 
 # GPU 3D tests (OpenCL)
 ocl3D-tests: gpu.ocl3D.tst gpu-reduce.ocl3D.tst restriction1.ocl3D.tst gpu-boundary.ocl3D.tst \
