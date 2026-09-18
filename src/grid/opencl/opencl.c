@@ -320,15 +320,10 @@ void realloc_ssbo (size_t field_size)
     return;
   size_t totalsize = field_size * datasize;
   assert (totalsize > GPUContext.current_size);
-  cl_mem new_buffer = clCreateBuffer (ctx, CL_MEM_READ_WRITE, totalsize, NULL, NULL);
-  assert (new_buffer);
-  if (GPUContext.current_size > 0) {
-    // Copy old data to new buffer
-    CL_CHECK (clEnqueueCopyBuffer (queue, ssbo, new_buffer, 0, 0, GPUContext.current_size, 0, NULL, NULL));
-    CL_CHECK (clFinish (queue));
+  if (ssbo)
     CL_CHECK (clReleaseMemObject (ssbo));
-  }
-  ssbo = new_buffer;
+  ssbo = clCreateBuffer (ctx, CL_MEM_READ_WRITE, totalsize, NULL, NULL);
+  assert (ssbo);
   GPUContext.current_size = totalsize;
 }
 

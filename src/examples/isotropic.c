@@ -179,10 +179,7 @@ and the performances on an RTX4090 are impressive (see the computational
 speed plot below).
 
 Note that up to 512^3^ is possible when using an RTX4090 with 24GB of
-memory (~18 GB are used), but only with the OpenGL version (`make
-isotropic.gpu3D.tst`). The CUDA version uses more memory and 512^3^
-does not fit in 24GB: this is a bug in the way memory is (re)allocated
-in the [cuda backend](/src/grid/cuda/cuda.c#realloc_ssbo).
+memory (~16 GB are used).
 
 ## Running with MPI on occigen
 

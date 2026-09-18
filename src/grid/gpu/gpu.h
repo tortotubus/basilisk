@@ -138,13 +138,6 @@ macro2 foreach_level_or_leaf_stencil (int _level, char flags, Reduce reductions,
     {...}
 }
 
-void realloc_scalar_gpu (int size)
-{
-  realloc_scalar (size);
-  void realloc_ssbo (size_t);
-  realloc_ssbo (field_size());
-}
-
 void gpu_boundary_level (scalar * list, int l)
 {
   scalar * list1 = NULL;
@@ -157,5 +150,8 @@ void gpu_boundary_level (scalar * list, int l)
     free (list1);
   }
 }
+
+void realloc_scalar_gpu (int size);
+void realloc_scalar_cpu (int size) { realloc_scalar(size); }
 
 #define realloc_scalar(size) realloc_scalar_gpu (size)

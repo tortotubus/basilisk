@@ -426,15 +426,8 @@ void realloc_ssbo (size_t field_size)
     size_t size = min (totalsize, GPUContext.max_ssbo_size);
     totalsize -= size;
     if (current_size < GPUContext.max_ssbo_size) {
-      GLuint tmp;
-      GL_C (glGenBuffers (1, &tmp));
-      GL_C (glBindBuffer (GL_SHADER_STORAGE_BUFFER, tmp));
+      GL_C (glBindBuffer (GL_SHADER_STORAGE_BUFFER, ssbo[GPUContext.nssbo - 1]));
       GL_C (glBufferData (GL_SHADER_STORAGE_BUFFER, size, NULL, GL_DYNAMIC_READ));
-      GL_C (glBindBuffer (GL_COPY_READ_BUFFER, ssbo[GPUContext.nssbo - 1]));
-      GL_C (glBindBuffer (GL_COPY_WRITE_BUFFER, tmp));
-      GL_C (glCopyBufferSubData (GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, current_size));
-      GL_C (glDeleteBuffers (1, &ssbo[GPUContext.nssbo - 1]));
-      ssbo[GPUContext.nssbo - 1] = tmp;
     }
 #if DEBUGALLOC    
     else

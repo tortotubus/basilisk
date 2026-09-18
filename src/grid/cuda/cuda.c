@@ -315,13 +315,8 @@ void realloc_ssbo (size_t field_size)
     return;
   size_t totalsize = field_size*datasize;
   assert (totalsize > GPUContext.current_size);
-  CUdeviceptr ptr;
-  CUDA_CHECK (cuMemAlloc (&ptr, totalsize)); // fixme: allocates memory twice
-  if (GPUContext.current_size > 0) {
-    CUDA_CHECK (cuMemcpyDtoD (ptr, ssbo, GPUContext.current_size));
-    CUDA_CHECK (cuMemFree (ssbo));
-  }
-  ssbo = ptr;  
+  CUDA_CHECK (cuMemFree (ssbo));
+  CUDA_CHECK (cuMemAlloc (&ssbo, totalsize));
   GPUContext.current_size = totalsize;
 }
 

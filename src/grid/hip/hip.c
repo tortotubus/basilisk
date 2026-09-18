@@ -367,13 +367,8 @@ void realloc_ssbo (size_t field_size)
     return;
   size_t totalsize = field_size*datasize;
   assert (totalsize > GPUContext.current_size);
-  hipDeviceptr_t ptr;
-  HIP_CHECK (hipMalloc ((void **) &ptr, totalsize)); // fixme: allocates memory twice
-  if (GPUContext.current_size > 0) {
-    HIP_CHECK (hipMemcpy ((void *)ptr, (void *)ssbo, GPUContext.current_size, hipMemcpyDeviceToDevice));
-    HIP_CHECK (hipFree ((void *) ssbo));
-  }
-  ssbo = ptr;
+  HIP_CHECK (hipFree ((void *) ssbo));
+  HIP_CHECK (hipMalloc ((void **) &ssbo, totalsize));
   GPUContext.current_size = totalsize;
 }
 
