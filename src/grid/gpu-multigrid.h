@@ -18,7 +18,7 @@
   "#define val_red_(s) _data_val((s).i, point.j - GHOSTS +"		\
   "  (point.i - GHOSTS)*NY + _shift[point.level])\n"			\
   "#define fine(a,di,dj,dk)"						\
-  "  _data_val(_index(a,dk), 2*point.j - GHOSTS + (dj) +"			\
+  "  _data_val(_index(a,dk), 2*point.j - GHOSTS + (dj) +"               \
   "        (2*point.i - GHOSTS + (di))*(point.n.y*2 + 2*GHOSTS) +"	\
   "        _shift[point.level + 1])\n"					\
   "#define coarse(a,di,dj,dk)"						\
@@ -29,8 +29,8 @@
 #define GPU_CODE()							\
   "#define valt(s,di,dj,dk)"						\
   "  _data_val(_index(s,0), point.k + (dk) +"				\
-  " (point.n.z + 2*GHOSTS)*(point.j + (dj) +"			\
-  " (point.i + (di))*(point.n.y + 2*GHOSTS)) +"			\
+  " (point.n.z + 2*GHOSTS)*(point.j + (dj) +"                           \
+  " (point.i + (di))*(point.n.y + 2*GHOSTS)) +"                         \
   " _shift[point.level])\n"						\
   "#define val_red_(s) _data_val((s).i, point.k - GHOSTS +"		\
   " NZ*(point.j - GHOSTS + (point.i - GHOSTS)*NY) +"			\
@@ -38,12 +38,12 @@
   "#define fine(a,di,dj,dk)"						\
   "  _data_val(_index(a,0), 2*point.k - GHOSTS + (dk) +"		\
   " (point.n.z*2 + 2*GHOSTS)*(2*point.j - GHOSTS + (dj) +"		\
-  " (2*point.i - GHOSTS + (di))*(point.n.y*2 + 2*GHOSTS)) +"	\
-  " _shift[point.level + 1])\n"					\
+  " (2*point.i - GHOSTS + (di))*(point.n.y*2 + 2*GHOSTS)) +"            \
+  " _shift[point.level + 1])\n"                                         \
   "#define coarse(a,di,dj,dk)"						\
   "  _data_val(_index(a,0), (point.k + GHOSTS)/2 + (dk) +"		\
-  " (point.n.z/2 + 2*GHOSTS)*((point.j + GHOSTS)/2 + (dj) +"	\
-  " ((point.i + GHOSTS)/2 + (di))*(point.n.y/2 + 2*GHOSTS)) +"	\
+  " (point.n.z/2 + 2*GHOSTS)*((point.j + GHOSTS)/2 + (dj) +"            \
+  " ((point.i + GHOSTS)/2 + (di))*(point.n.y/2 + 2*GHOSTS)) +"          \
   " _shift[point.level - 1])\n"
 #endif
 

@@ -306,8 +306,8 @@ implementation also has the following limitations, some of which will
 be lifted in the (not-too-distant) future. In rough order of "lifting
 priority" these are:
 
-* Only 2D Cartesian and Multigrid grids for now: 3D multigrid will
-  follow easily, quadtrees and octrees are more difficult.
+* Only 2D and 3D Cartesian and Multigrid grids for now: quadtrees and
+  octrees are more difficult.
 * The maximum size of any scalar field is limited to what can be
   indexed using a 32-bits unsigned integer i.e. 2^32^ floats or 16 GB.
 * Boundary conditions have only been implemented for 3x3 stencils.
@@ -461,7 +461,7 @@ GPUContext_t GPUContext = {
 # define GPU_REAL_TYPE "double"
 # define GPU_COORD2_TYPE "dvec2"
 # define GPU_COORD3_TYPE "dvec3"
-# define GPU_MATH_DECLS                                              \
+# define GPU_MATH_DECLS                                             \
   "#define cos(x) cos(float(x))\n"                                  \
   "#define sin(x) sin(float(x))\n"                                  \
   "#define exp(x) exp(float(x))\n"                                  \
@@ -493,6 +493,7 @@ GPUContext_t GPUContext = {
 #else
 # define DIMDECL " uint n;"
 #endif
+
 #if LAYERS
 # define LAYERSDECL " int l;"
 # define GPU_POINT_LAYER ",point.l"
@@ -506,14 +507,14 @@ GPUContext_t GPUContext = {
 #endif
 
 #define GPU_TYPE_DECLS                                                \
-  "#define real " GPU_REAL_TYPE "\n"                                 \
-  "#define coord " GPU_COORD3_TYPE "\n"                              \
-  "#define _coord " GPU_DIM_COORD_TYPE "\n"                          \
-  "#define ivec " GPU_IVEC_TYPE "\n"                                \
+  "#define real " GPU_REAL_TYPE "\n"                                  \
+  "#define coord " GPU_COORD3_TYPE "\n"                               \
+  "#define _coord " GPU_DIM_COORD_TYPE "\n"                           \
+  "#define ivec " GPU_IVEC_TYPE "\n"                                  \
   GPU_MATH_DECLS                                                      \
-  TYPEDEF("scalar", "{ int i, index; }")                            \
-  TYPEDEF("vector", GPU_VECTOR_BODY)                                 \
-  TYPEDEF("tensor", GPU_TENSOR_BODY)                                 \
+  TYPEDEF("scalar", "{ int i, index; }")                              \
+  TYPEDEF("vector", GPU_VECTOR_BODY)                                  \
+  TYPEDEF("tensor", GPU_TENSOR_BODY)                                  \
   TYPEDEF("Point", "{ " GPU_POINT_INDICES DIMDECL LAYERSDECL "}")
 
 #define GPU_NEIGHBOR_DECL                                             \
@@ -849,10 +850,10 @@ static bool is_boundary_attribute (const External * g)
 	   !strcmp (g->name, ".boundary_bottom") ||
 	   !strcmp (g->name, ".boundary_top")
 #if dimension == 3
-     || !strcmp (g->name, ".boundary_front")
-     || !strcmp (g->name, ".boundary_back")
+           || !strcmp (g->name, ".boundary_front")
+           || !strcmp (g->name, ".boundary_back")
 #endif
-     ));
+           ));
 }
 
 static
