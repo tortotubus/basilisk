@@ -337,14 +337,11 @@ void realloc_ssbo (size_t field_size)
   size_t totalsize = field_size*datasize;
   assert (totalsize > GPUContext.current_size);
   gpu_synchronize();
-  id<MTLBuffer> buffer = [mtl_device newBufferWithLength:totalsize
-                                     options:MTLResourceStorageModeShared];
-  MTL_CHECK (buffer, "could not allocate %ld bytes on the GPU", totalsize);
-  if (GPUContext.current_size > 0) {
-    memcpy (buffer.contents, ssbo.contents, GPUContext.current_size);
+  if (ssbo)
     [ssbo release];
-  }
-  ssbo = buffer;
+  ssbo = [mtl_device newBufferWithLength:totalsize
+                     options:MTLResourceStorageModeShared];
+  MTL_CHECK (ssbo, "could not allocate %ld bytes on the GPU", totalsize);
   GPUContext.current_size = totalsize;
 }
 
