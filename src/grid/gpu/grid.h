@@ -411,6 +411,7 @@ declared at program scope must reside in the `constant` address space
   "#define _CONST_ constant\n"             \
   "#define tensor _bsk_tensor\n" /* 'tensor' clashes with metal::tensor */ \
   TYPEDEF("ivec2", "{ int x, y; }")        \
+  TYPEDEF("ivec3", "{ int x, y, z; }")     \
   TYPEDEF("vec2", "{ float x, y; }")       \
   TYPEDEF("vec3", "{ float x, y, z; }")    \
   TYPEDEF("vec4", "{ float r, g, b, a; }") \
@@ -1250,10 +1251,10 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
       char e[20];
       snprintf (e, 19, "%d", Dimensions.z);
       fs = str_append (fs,
-                       "const ivec3 Dimensions = {", s, ",", d, ",", e, "};\n"
-                       "const uint NY = N*", d,
+                       "_CONST_ ivec3 Dimensions = {", s, ",", d, ",", e, "};\n"
+                       "_CONST_ uint NY = N*", d,
                        (loop->face & (1 << 1)) || loop->vertex ? "+1" : "", ";\n"
-                       "const uint NZ = N*", e,
+                       "_CONST_ uint NZ = N*", e,
                        (loop->face & (1 << 2)) || loop->vertex ? "+1" : "", ";\n");
 #endif
 #if !_CUDA
@@ -1331,7 +1332,7 @@ char * external_write (char * fs, const External * g, const ForeachData * loop,
 #else
         snprintf (s, 19, "int(N*%d)", Dimensions.z);
 #endif
-      fs = str_append (fs, "const int bc_period_z = ", s, ";\n");
+      fs = str_append (fs, "_CONST_ int bc_period_z = ", s, ";\n");
     }
 #endif
 #if dimension == 2
@@ -1879,10 +1880,10 @@ static char * shader_append_func (char * s, const ForeachData * loop, const Exte
                   "void ", func, "("
                   "device real * _data [[buffer(0)]], "
                   "constant struct _Ctx_ * _ctx_ [[buffer(1)]], "
-                  "constant ivec2 & csOrigin [[buffer(2)]]");
+                  "constant ivec & csOrigin [[buffer(2)]]");
   if (locals)
     s = str_append (s, ", constant struct _Local & _local_ [[buffer(3)]]");
-  s = str_append (s, ", uint2 _tpig [[thread_position_in_grid]]){\n");
+  s = str_append (s, ", uint" xstr(dimension) " _tpig [[thread_position_in_grid]]){\n");
 #else // !_METAL
   s = str_append (s,
 #if _OPENCL
@@ -2040,7 +2041,11 @@ static Shader * compile_shader (ForeachData * loop,
 			 "csOrigin.y + int(gl_GlobalInvocationID.x) + GHOSTS,", d,
 #endif
 #elif dimension == 3
-#if _OPENCL
+#if _METAL
+                         "Point point = {csOrigin.x + int(_tpig.z) + GHOSTS,"
+			 "csOrigin.y + int(_tpig.y) + GHOSTS,"
+			 "csOrigin.z + int(_tpig.x) + GHOSTS,", d,
+#elif _OPENCL
                          "Point point = {csOrigin.x + get_group_id(2)*get_local_size(2) + get_local_id(2) + GHOSTS,"
                          "csOrigin.y + get_group_id(1)*get_local_size(1) + get_local_id(1) + GHOSTS,"
                          "csOrigin.z + get_group_id(0)*get_local_size(0) + get_local_id(0) + GHOSTS,", d,

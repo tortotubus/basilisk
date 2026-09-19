@@ -18,18 +18,19 @@ cd $BASILISK/grid/metal
 make libmetal.a
 ~~~
 
-The [default Makefile](/src/Makefile.defs) provides a recipe to run a
-program using the metal grid:
+The [default Makefile](/src/Makefile.defs) provides recipes to run a
+program using the 2D or 3D metal grids:
 
 ~~~bash
 make myprogram.metal.tst
+make myprogram.metal3D.tst
 ~~~
 
 The test cases are:
 
 ~~~bash
 cd $BASILISK/test
-make metal-tests
+make metal-tests metal3D-tests
 ~~~
 
 Note that this file is Objective-C (the Metal API is only available in
@@ -87,7 +88,7 @@ typedef struct {
 
 extern int N;
 extern double X0, Y0, Z0, L0;
-extern struct { int x, y; } Dimensions;
+extern struct { int x, y, z; } Dimensions;
 
 #include "../../ast/symbols.h"
 
@@ -168,7 +169,8 @@ struct _Ctx_ {
 };
 
 struct _Shader {
-  unsigned ng[2], nwg[2];
+  unsigned ng[3], nwg[3];
+  int dimension;
   struct _Ctx_ * hctx, * tmp;
   id<MTLBuffer> dctx, dargs;
   MyUniform * uniforms, * locals;
@@ -390,10 +392,11 @@ static size_t pad_to_align (size_t current_offset, size_t alignment) {
 }
 
 void finalize_shader (Shader * shader, External * externals, External * merged,
-                      unsigned ng[2], unsigned nwg[2])
+                      unsigned ng[3], unsigned nwg[3], int dim)
 {
-  for (int i = 0; i < 2; i++)
+  for (int i = 0; i < 3; i++)
     shader->ng[i] = ng[i], shader->nwg[i] = nwg[i];
+  shader->dimension = dim;
 
   /**
   ## Make list of local and global uniforms */
@@ -426,7 +429,7 @@ void finalize_shader (Shader * shader, External * externals, External * merged,
       case sym_DOUBLE:
         esize = sizeof(float); break;
       case sym__COORD:
-        nd *= 2;
+        nd *= dim;
         esize = sizeof(float); break;
       case sym_COORD:
         nd *= 3;
@@ -562,24 +565,26 @@ void post_setup_shader (Shader * shader, External * externals)
 
 static void metal_dispatch (id<MTLComputeCommandEncoder> encoder,
                             id<MTLComputePipelineState> pipeline,
-                            NSUInteger gx, NSUInteger gy,
-                            NSUInteger tx, NSUInteger ty)
+                            NSUInteger gx, NSUInteger gy, NSUInteger gz,
+                            NSUInteger tx, NSUInteger ty, NSUInteger tz)
 {
   /**
   Register-hungry kernels may not be able to use the default
   threadgroup size. */
 
   NSUInteger maxt = pipeline.maxTotalThreadsPerThreadgroup;
-  while (tx*ty > maxt && (tx > 1 || ty > 1)) {
-    if (ty >= tx) ty = (ty + 1)/2;
+  while (tx*ty*tz > maxt && (tx > 1 || ty > 1 || tz > 1)) {
+    if (tz >= ty && tz >= tx) tz = (tz + 1)/2;
+    else if (ty >= tx) ty = (ty + 1)/2;
     else tx = (tx + 1)/2;
   }
   if (mtl_nonuniform)
-    [encoder dispatchThreads: MTLSizeMake (gx, gy, 1)
-             threadsPerThreadgroup: MTLSizeMake (tx, ty, 1)];
+    [encoder dispatchThreads: MTLSizeMake (gx, gy, gz)
+             threadsPerThreadgroup: MTLSizeMake (tx, ty, tz)];
   else
-    [encoder dispatchThreadgroups: MTLSizeMake ((gx + tx - 1)/tx, (gy + ty - 1)/ty, 1)
-             threadsPerThreadgroup: MTLSizeMake (tx, ty, 1)];
+    [encoder dispatchThreadgroups: MTLSizeMake ((gx + tx - 1)/tx, (gy + ty - 1)/ty,
+                                                (gz + tz - 1)/tz)
+             threadsPerThreadgroup: MTLSizeMake (tx, ty, tz)];
 }
 
 int run_shader (const Shader * shader, const RegionParameters * region)
@@ -601,25 +606,30 @@ int run_shader (const Shader * shader, const RegionParameters * region)
         [encoder setBytes: shader->args length: shader->lsize atIndex: 3];
     }
 
-    struct { int x, y; } csOrigin = {0,0};
+    struct { int x, y, z; } csOrigin = {0,0,0};
+    size_t csOriginSize = shader->dimension*sizeof(int);
 
     /**
     ## Render
 
     If this is a `foreach_point()` iteration, we access a single point */
 
-    if (region->n.x == 1 && region->n.y == 1) {
+    if (region->n.x == 1 && region->n.y == 1 &&
+        (shader->dimension == 2 || region->n.z == 1)) {
       assert (!GPUContext.fragment_shader);
       csOrigin.x = (region->p.x - X0)/L0*Nl*Dimensions.x;
       csOrigin.y = (region->p.y - Y0)/L0*Nl*Dimensions.x;
-      [encoder setBytes: &csOrigin length: sizeof (csOrigin) atIndex: 2];
-      metal_dispatch (encoder, shader->pipeline, 1, 1, 1, 1);
+      if (shader->dimension == 3)
+        csOrigin.z = (region->p.z - Z0)/L0*Nl*Dimensions.x;
+      [encoder setBytes: &csOrigin length: csOriginSize atIndex: 2];
+      metal_dispatch (encoder, shader->pipeline, 1, 1, 1, 1, 1, 1);
     }
 
     /**
     This is a region */
 
-    else if (region->n.x || region->n.y) {
+    else if (region->n.x || region->n.y ||
+             (shader->dimension == 3 && region->n.z)) {
 
       /**
       A region requires the "fragment shader" mode of the [OpenGL
@@ -633,10 +643,11 @@ int run_shader (const Shader * shader, const RegionParameters * region)
 
     else {
       assert (!GPUContext.fragment_shader);
-      [encoder setBytes: &csOrigin length: sizeof (csOrigin) atIndex: 2];
+      [encoder setBytes: &csOrigin length: csOriginSize atIndex: 2];
       metal_dispatch (encoder, shader->pipeline,
                       shader->ng[0]*shader->nwg[0], shader->ng[1]*shader->nwg[1],
-                      shader->nwg[0], shader->nwg[1]);
+                      shader->ng[2]*shader->nwg[2],
+                      shader->nwg[0], shader->nwg[1], shader->nwg[2]);
     }
   }
   return Nl;
@@ -789,14 +800,16 @@ double gpu_reduction (size_t offset,
                       const char op,
                       const RegionParameters * region,
                       GPUData * data,
-                      size_t nb)
+                      size_t nb,
+                      int dim)
 {
-  if (region->n.x == 1 && region->n.y == 1) {
+  if (region->n.x == 1 && region->n.y == 1 && (dim == 2 || region->n.z == 1)) {
     int i = (region->p.x - X0)/L0*N;
     int j = (region->p.y - Y0)/L0*N;
-    if (i < 0 || i >= N || j < 0 || j >= N)
+    int k = dim == 3 ? (region->p.z - Z0)/L0*N : 0;
+    if (i < 0 || i >= N || j < 0 || j >= N || (dim == 3 && (k < 0 || k >= N)))
       return 0.;
-    offset += i*N + j;
+    offset += dim == 2 ? i*N + j : (i*N + j)*N + k;
     nb = 1;
   }
   if (nb == 1) {

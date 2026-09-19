@@ -92,6 +92,12 @@ clean:
 %.metal.s.d: CFLAGS += -grid=metal/multigrid
 %.metal.tst: CFLAGS += -grid=metal/multigrid
 
+%.metal3D.c: %.c $(BASILISK)/grid/gpu/liberrors.a $(BASILISK)/grid/metal/libmetal.a
+	ln -s -f $< $@
+%.metal3D.s:   CFLAGS += -grid=metal/multigrid3D
+%.metal3D.s.d: CFLAGS += -grid=metal/multigrid3D
+%.metal3D.tst: CFLAGS += -grid=metal/multigrid3D
+
 %.CADNA.c: %.c
 	ln -s -f $< $@
 

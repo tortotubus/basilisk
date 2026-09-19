@@ -661,4 +661,9 @@ ocl3D-tests: gpu.ocl3D.tst gpu-reduce.ocl3D.tst restriction1.ocl3D.tst gpu-bound
 	periodic.ocl3D.tst poisson.ocl3D.tst
 ocl3D-tests: CFLAGS += -DPRINTNSHADERS
 
+# GPU 3D tests (Metal, macOS)
+metal3D-tests: gpu.metal3D.tst gpu-reduce.metal3D.tst restriction1.metal3D.tst gpu-boundary.metal3D.tst \
+	periodic.metal3D.tst poisson.metal3D.tst
+metal3D-tests: CFLAGS += -DPRINTNSHADERS
+
 include ../Makefile.defs
