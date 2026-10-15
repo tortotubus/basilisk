@@ -354,10 +354,6 @@ void   (* scalar_clone)       (scalar, scalar);
 
 // timers
 
-#if _MPI
-static double mpi_time = 0.;
-#endif
-
 typedef struct {
   clock_t c;
   struct timeval tv;
