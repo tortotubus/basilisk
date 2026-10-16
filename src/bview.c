@@ -2,7 +2,7 @@
 # Basilisk View "dump files" server
 
 This can be used to interactively display [dump files](output.h#dump)
-using the [javascript interface](jview/README). 
+using the [gview interface](gview/display.c). 
 
 Typical usage is:
 

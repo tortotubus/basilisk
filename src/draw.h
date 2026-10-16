@@ -664,7 +664,7 @@ macro colorized (float fc[3], bool constant_color,
 * *format*: how to format numbers.
 * *levels*: the number of subdivisions.
 
-Note that this cannot be used with [jview](jview/README) (yet) because
+Note that this cannot be used with [gview](gview/display.c) (yet) because
 it mixes surface and line rendering. */
 
 trace

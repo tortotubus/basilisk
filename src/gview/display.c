@@ -1,11 +1,240 @@
 /**
 # Gview
 
-To install
+This is the interactive interface (i.e. the client) for the [bview
+server](/src/display.h).
+
+There are two versions of this interface:
+
+* a standalone (Linux) executable called `gview-gui` which can be compiled
+  (optionally) when installing Basilisk,
+* a web version, which runs in the browser, does not need any
+  installation and should be portable to any system (Linux, Windows,
+  Mac).
+
+Both versions are compiled from the same source code and the interface
+is thus (almost) identical. The web "executable" uses the
+[WebAssembly](https://webassembly.org/) format which is part of the
+W3C standard.
+
+Note that if you have used [jview](/src/jview/README) in the past, the
+web version of gview is the new (and hopefully better) equivalent.
+
+## Quickstart guide
+
+As described in more detail in the [server
+documentation](/src/display.h), running a simulation interactively
+with the web version of gview is quite simple. Let's take the [von
+Karman vortex street](/src/examples/karman.c) as an example. You can
+just do:
 
 ~~~bash
-sudo apt install libimgui-dev
+cd $BASILISK/examples
+CFLAGS=-DDISPLAY=-1 make karman.tst
 ~~~
+
+which will give
+
+~~~bash
+qcc -autolink -DDISPLAY=-1 -g -Wall -pipe -D_FORTIFY_SOURCE=2 -O2 \
+  -fopenmp -o karman/karman karman.c -lm
+[karman.tst]
+https://basilisk.fr/gview?localhost%207100
+~~~
+
+Just follow the link (or copy it) in your (local) web browser and you
+should get to the gview interface:
+
+* clicking on "Run" will start the simulation,
+* zooming can be done using the mouse wheel or the mouse middle bouton,
+* panning uses the mouse right button,
+* the "space" keyboard key pauses the simulation, "s" does one timestep,
+* the "Draw" menu can be used to add new "drawing commands",
+* the drawing commands can be selected or deselected, displayed or
+  hidden using the tick boxes, and deleted using the "Delete" key or the "Edit" menu,
+* the "Save" and "Load" menu can be used to save/restore the drawing
+  commands (including the viewing parameters) to/from a file.
+
+Note that the interface/parameters of the draw commands are exactly
+those described in the corresponding [draw.h](/src/draw.h)
+functions. An "Help" link is provided in the interface which will open
+the corresponding documentation. The commands are saved from the gview
+interface as calls to the corresponding functions which can be
+directly cut and pasted if you want to use them directly for
+non-interactive rendering in your simulation code.
+
+Running the interface directly as a (linux) program is also simple,
+but you need to compile the program first on your machine (see the
+installation instructions below). Just do in another terminal
+
+~~~bash
+gview-gui
+~~~
+
+which should give you another gview window, almost identical to the
+browser version, but directly on your system, rather than through the
+web browser. The `gview-gui` command can take optional parameters, use
+`gview-gui -h` for a summary.
+
+## Compiling the linux executable
+
+The linux executable depends on external libraries which need to be
+installed before compilation: these are [GLFW](https://www.glfw.org/)
+and [Dear ImGui](https://github.com/ocornut/imgui), which can be
+easily installed on Debian-based systems using:
+
+~~~bash
+sudo apt install g++ libglfw3-dev libimgui-dev
+~~~
+
+Then just do
+
+~~~bash
+cd $BASILISK/gview
+make
+~~~
+
+you will note that two executables are created `gview` (aliased as
+`src/gview-gui`) and `gview-nogui` which only includes a basic
+interface (mouse and keyboard actions above) and so does not require
+Dear ImGui.
+
+## Automatic reconnection
+
+If you were used to the old jview interface, an annoying "feature" was
+that one had to reconnect manually when starting or restarting a
+simulation. Gview will attempt to automatically reconnect by default,
+so that manual reconnection should not be necessary anymore. This
+connection status is indicated by the color of the "server port" pair
+in the interface:
+
+* <div style="color:green">green: the client is connected to the running server,</div>
+* <div style="color:orange">orange: the client is in "automatic
+  reconnection" mode, but is not connected (yet) to the server,</div>
+* <div style="color:red">red: the client is not connected. Manual
+  reconnection is required to either start the connection (if the
+  server is running) or to start automatic reconnection.</div>
+
+Note that for some reason (probably to do with a limit on the number
+of failed reconnection attempts in the WebSocket implementation), the
+web version can be sometimes quite slow to reconnect.
+  
+## Differences between the web and standalone versions
+
+Aside from the fact that one is a "native" executable and the other is
+"interpreted" through the web browser (which can result in, probably
+negligible, performance differences), there are a few differences
+between the two versions.
+
+For example, the standalone version can take arguments on the command
+line, whereas these arguments need to be specified in the URL for the
+web version. An example would be
+
+~~~bash
+gview-gui --debug localhost 7101
+~~~
+
+with the corresponding URL
+
+~~~bash
+https://basilisk.fr/gview?--debug localhost 7101
+~~~
+
+Most are minor interface details like this, but an important
+difference is that the web version relies on the web browser
+implementation of the
+[WebSocket](https://en.wikipedia.org/wiki/WebSocket) transfer
+protocol, wherewas the standalone version uses its own implementation
+([transfer_ws.c]()). Because of security concerns for general web
+applications, the web browser implementation of WebSocket is much more
+restrictive than the standalone version (which is not meant to be used
+for general web applications). More annoyingly, these security
+restrictions can be different when using different web browsers
+(e.g. Chrome, FireFox etc.).
+
+To summarise, the major security restriction is what is known as the
+[Same-origin policy](https://en.wikipedia.org/wiki/Same-origin_policy)
+which does not allow an encrypted web site/application (in our case
+https://basilisk.fr/gview) to use an unencrypted communication channel
+(the websocket used to communicate with the server), *unless it is
+running on the same machine running the browser*, i.e. the data does
+not leave the machine. This means that the web browser version, when
+using https://, can only connect to the local machine
+i.e. `localhost`. To reflect this limitation the web version will not
+allow you to change the `localhost` server name in the interface,
+whereas the standalone version does.
+
+The client/server model of gview is explicitely designed to allow you
+to monitor (and possibly control) a simulation running on a distant
+machine (for example a supercomputer), but because of the restriction
+above the web version does not allow you to do that. There are a few
+solutions however:
+
+* you could, of course, just use the standalone version,
+* you can also redirect or "tunnel through SSH" the remote connection
+  to your local machine, see the [documentation
+  here](/src/jview/README#interactive-display-of-a-remote-simulation),
+* finally, you could install the web version locally using
+
+~~~bash
+sudo apt install emscripten
+cd $BASILISK/gview
+make gview.js
+~~~
+  
+and then run a local web server to serve the web version i.e.
+  
+~~~bash
+python3 -m http.server 8000
+~~~
+
+and open the web version as `http://127.0.0.1:8000/gview.html`. The
+difference here is that the connection is not encrypted and so the
+web browser will allow you to connect to an unencrypted websocket on
+a remote server.
+
+## Troubleshooting the web version
+
+For the web version it can be useful to check the console error
+messages, in case of problems. To do that, for example in
+Chrome/Chromium look for the menu "More tools -> Developer tools ->
+Console". There are equivalent "Developer tools" options in FireFox.
+
+Note that you may see messages such as:
+
+~~~bash
+WebSocket connection to 'ws://localhost:7100/' failed: Error in connection establishment:
+net::ERR_CONNECTION_REFUSED
+~~~
+
+You can ignore these when no Basilisk server is running on the
+machine. It just indicates that the client tried to connect (or
+reconnect automatically) but could not.
+
+On the other hand if you get a message like this:
+
+~~~bash
+gview.js:1 WebSocket connection to 'ws://localhost:7100/' failed: Error in connection establishment:
+net::ERR_BLOCKED_BY_LOCAL_NETWORK_ACCESS_CHECKS
+~~~
+
+This may mean that you are hitting some security policy such as the
+new Chromium Local Network Access (LNA) restriction, rather than a
+WebSocket problem in your server. Recent Chromium versions have
+tightened this policy.
+
+## TODO
+
+* Does not work with CUDA/OpenCL/HIP yet (even in "CPU mode").
+* Direct GPU display: when running on GPUs vertex buffers should be
+  created on the GPU and displayed directly. See also [/src/gview.h]().
+* Colors and geometry decoupling: the server should only return the
+  geometry and a scalar 'color'. The rest (colormapping etc.) should
+  be done on the client.
+* Objects mixing surfaces and lines: at the moment only "pure" surface
+  or line objects can be drawn. The generalization requires two sets
+  of array index buffers: one for lines and one for surfaces.
+* Saving to something else than ".gv" files i.e. PDF, SVG, STL, OBJ etc.
 */
 
 #include "transfer.h"
@@ -1528,7 +1757,8 @@ void display_connect (const char * host, int port)
     exit (1);
   }
   Display.transfer = transfer;  
-  assert (!transfer_set_throttle (transfer, high_bytes, low_bytes, high_messages, low_messages));
+  // We disable throttling for the moment, since it sometimes gave strange behaviour
+  //  assert (!transfer_set_throttle (transfer, high_bytes, low_bytes, high_messages, low_messages));
   display_set_connected (-1);
 }
 

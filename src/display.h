@@ -2,7 +2,7 @@
 # Server-side display
 
 This file implements the server-side of the interactive display of a
-running Basilisk code. The client-side is typically done by the
+running Basilisk code. The client-side is typically done by
 [gview](gview/display.c).
 
 This works using two main components:
