@@ -13,11 +13,12 @@ generates "computation kernels" for each [loop
 iterator](/Basilisk%20C#iterators). These kernels are then dynamically
 compiled (at runtime) by the [OpenGL Shading
 Language](https://en.wikipedia.org/wiki/OpenGL_Shading_Language)
-(GLSL) compiler which is part of the (OpenGL) graphics card driver. If
-compilation is successful, the corresponding loop is performed on the
-GPU, otherwise the CPU is used. If this hybrid GPU/CPU hybrid mode of
-operation is used, synchronisation between the GPU and CPU memory is
-necessary and is done automatically.
+(GLSL) compiler which is part of the (OpenGL) graphics card driver, or
+by the equivalent runtime compilers provided by the CUDA, HIP, OpenCL
+or Metal libraries. If compilation is successful, the corresponding
+loop is performed on the GPU, otherwise the CPU is used. If this
+hybrid GPU/CPU hybrid mode of operation is used, synchronisation
+between the GPU and CPU memory is necessary and is done automatically.
 
 OpenGL is an open standard (unlike
 e.g. [CUDA](https://en.wikipedia.org/wiki/CUDA)) and is widely
@@ -58,6 +59,9 @@ which will compile and run `code.c` using the `gpu/multigrid` grid.
 Note that for all this to work properly you first need to
 [install](#installation) the Basilisk GPU libraries.
 
+Similar simple compilation targets are provided for the other drivers
+(i.e. `.cuda.tst`, `.hip.tst`, `.ocl.tst`, `.metal.tst`).
+
 ## Installation
 
 Basilisk uses the [GLFW](https://www.glfw.org/) library to configure
@@ -89,6 +93,8 @@ fast Nvidia graphics card using
 ~~~bash
 __NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia glxinfo -B
 ~~~
+
+See [here](#see-also) for the installation of other drivers (CUDA, HIP etc.).
 
 ## Tests
 
@@ -132,6 +138,13 @@ happens to be what is used within most `foreach` loops in Basilisk
 (this is not a coincidence...). Thus, in many cases, simple and
 efficient Basilisk code will also run transparently and efficiently on
 GPUs.
+
+Note that GLSL is only used by the OpenGL driver. CUDA kernels use a
+general C++ implementation which consequently has less restrictions
+than GLSL, as does the AMD kernel compiler. OpenCL uses a variant of
+C99, which is also less restrictive than GLSL. Generally speaking,
+writing code compatible with GLSL, as described in what follows, will
+ensure portability for all these drivers.
 
 ### GPU/CPU hybrid mode
 
@@ -291,7 +304,8 @@ function](/src/ast/macro.h#complex-return-macros).
   defined at compilation time. This means that variable/dynamical
   arrays, dynamic memory allocation (malloc etc.) and ***pointers***
   do not exist on GPUs (and in GLSL). Using any of these in a foreach
-  loop will give you a GLSL error as above.
+  loop will give you a GLSL error as above (note that these
+  restrictions can be lifted on CUDA, HIP etc. drivers).
 * Limited support for function pointers: function pointers are
   fundamentally different from memory pointers.  Basilisk includes
   limited support for function pointers i.e. what is sufficient for
@@ -352,6 +366,8 @@ To maximize performance, here are a few tips and observations:
 * Use [built-in profiling](/src/README.trace) to check where time is
   spent. Use the `-DTRACE=3` compilation flag to get profiling
   information at the level of foreach loops.
+* On Nvidia cards the [CUDA driver](/src/grid/cuda/cuda.c) generally
+  gives better performance, especially for large problems.
 
 ## Profiling with Nsight Compute or Nsight Systems
 
@@ -374,10 +390,10 @@ nsys-ui report*.nsys-rep
 * [Test cases on GPUs](/src/test/README#gpu-tests)
 * [GPU benchmarks](Benchmarks.md)
 * [Computation kernels](/src/ast/kernels.c)
-* [An experimental CUDA driver](/src/grid/cuda/cuda.c)
-* [An experimental HIP driver](/src/grid/hip/hip.c)
-* [An experimental OpenCL driver](/src/grid/opencl/opencl.c)
-* [An experimental Metal driver (macOS)](/src/grid/metal/metal.c)
+* [The CUDA driver](/src/grid/cuda/cuda.c)
+* [The HIP driver](/src/grid/hip/hip.c)
+* [The OpenCL driver](/src/grid/opencl/opencl.c)
+* [The (experimental) Metal driver (macOS)](/src/grid/metal/metal.c)
 
 # Implementation */
 
