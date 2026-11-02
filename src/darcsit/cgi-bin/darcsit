@@ -1601,13 +1601,12 @@ fi
 
 ################### Any other file #######################
 
-if [[ ! "$REQUEST_URI" =~ $fileregex$ ]]; then
+if [[ ! "$REQUEST_URI" =~ ^$fileregex$ ]]; then
     cat <<EOF
 Status: 400 Bad Request
 Content-Type: text/html; charset=utf-8
 
 <h1>400 Bad Request</h1>
-Invalid request.
 EOF
     exit 0
 fi
