@@ -1417,7 +1417,7 @@ fi
 if [[ "$REQUEST_URI" =~ ^/_login(\?destination=$fileregex)?$ && -n "$USERS" ]] && is_not_bot; then
     destination=${REQUEST_URI##*\?destination=}
     if [[ "$destination" == "$REQUEST_URI" ]]; then
-	destination="$HTTP_REFERER"
+	destination="/"
     else
 	destination=$(echo "$destination" | urldecode)
     fi
